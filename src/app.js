@@ -13,15 +13,13 @@ const nodemailer = require('nodemailer')
 const app = express()
 app.use(express.json())
 app.use(morgan('dev'))
-// app.use(cors({
-//     origin: [
-//         'http://localhost:3000',
-//         'https://quizmaniaa.vercel.app',
-//         'https://quiz-maniaa.vercel.app',
-//         'https://quizzmaniaa.vercel.app'
-//     ],
-//     credentials: true
-// }))
+app.use(cors({
+    origin: [
+        'http://localhost:3000',
+        'https://healthq.vercel.app'
+    ],
+    credentials: true
+}))
 
 app.use(cors())
 app.use(cookieParser());
@@ -156,7 +154,7 @@ async function run() {
             }
         });
 
-        // get a user from the mongodb by email API 
+        // user blocking API 
         app.post('/signin/:email', async (req, res) => {
             const email = req.params.email
 
