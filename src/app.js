@@ -459,6 +459,14 @@ async function run() {
             }
         });
 
+        app.get('/find/role/:email', async (req, res) => {
+            const email = req.params.email
+            const user = await usersCollection.findOne({ email: email })
+            res.json({
+                role:user?.role
+            })
+        })
+
     } catch (error) {
         console.error("❌ MongoDB Connection Error:", error);
     }
