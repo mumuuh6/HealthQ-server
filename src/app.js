@@ -9,6 +9,12 @@ const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const bcrypt = require("bcrypt");
 const nodemailer = require('nodemailer')
+const multer = require("multer");
+const axios = require("axios");
+const fs = require("fs");
+const FormData = require("form-data");
+
+
 
 const app = express()
 app.use(express.json())
@@ -37,6 +43,17 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     }
 });
+
+// 📂 Multer Setup (File Upload)
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/");
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + "-" + file.originalname);
+  },
+});
+const upload = multer({ storage: storage });
 
 async function run() {
     try {
@@ -459,13 +476,32 @@ async function run() {
             }
         });
 
+        // find the role of user 
         app.get('/find/role/:email', async (req, res) => {
             const email = req.params.email
             const user = await usersCollection.findOne({ email: email })
             res.json({
-                role:user?.role
+                role: user?.role
             })
         })
+
+        // predict melanoma percentage 
+        app.post("/predict", upload.single("photo"), async (req, res) => {
+            try {
+                const filePath = req.file.path;
+                const formData = new FormData();
+                formData.append("image", fs.createReadStream(filePath));
+
+                const response = await axios.post("http://127.0.0.1:8000/predict", formData, {
+                    headers: { "Content-Type":"multipart/form-data" },
+                });
+
+                res.json(response.data);
+            } catch (error) {
+                console.error("Upload error:", error.message);
+                res.status(500).json({ message: "Server error during image upload" });
+            }
+        });
 
     } catch (error) {
         console.error("❌ MongoDB Connection Error:", error);
