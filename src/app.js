@@ -64,7 +64,7 @@ async function run() {
 
         // Users Collection 
         const usersCollection = database.collection("users")
-
+        const BookingCollection=database.collection("bookings")
         // verify token middleware
         const verifyToken = (req, res, next) => {
             // console.log("Inside the verify token");
@@ -475,7 +475,17 @@ async function run() {
                 });
             }
         });
-
+        //book appointment API
+        app.post('/book-appointment', async (req, res) => {
+            const body = req.body
+            console.log(body);
+            const result = await BookingCollection.insertOne(body)
+            res.json({
+                status: true,
+                message: "Appointment Booked Successfully",
+                data: result
+            })
+        })
         // find the role of user 
         app.get('/find/role/:email', async (req, res) => {
             const email = req.params.email
