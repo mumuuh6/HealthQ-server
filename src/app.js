@@ -65,6 +65,7 @@ async function run() {
         // Users Collection 
         const usersCollection = database.collection("users")
         const BookingCollection=database.collection("bookings")
+        
         // verify token middleware
         const verifyToken = (req, res, next) => {
             // console.log("Inside the verify token");
@@ -486,12 +487,23 @@ async function run() {
                 data: result
             })
         })
+        //get all doctors
+        app.get('/doctor/:role',async(req,res)=>{
+            const role=req.params.role
+            const query = { userType: role }
+            const doctors = await usersCollection.find(query).toArray();
+            res.json({
+                status: true,
+                message: "Doctors fetched successfully",
+                data: doctors
+            })
+        })
         // find the role of user 
         app.get('/find/role/:email', async (req, res) => {
             const email = req.params.email
             const user = await usersCollection.findOne({ email: email })
             res.json({
-                role: user?.role
+                userType: user?.userType
             })
         })
 
