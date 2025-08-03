@@ -46,12 +46,12 @@ const client = new MongoClient(uri, {
 
 // 📂 Multer Setup (File Upload)
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/");
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
+    destination: function (req, file, cb) {
+        cb(null, "uploads/");
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + "-" + file.originalname);
+    },
 });
 const upload = multer({ storage: storage });
 
@@ -64,8 +64,8 @@ async function run() {
 
         // Users Collection 
         const usersCollection = database.collection("users")
-        const BookingCollection=database.collection("bookings")
-        
+        const BookingCollection = database.collection("bookings")
+
         // verify token middleware
         const verifyToken = (req, res, next) => {
             // console.log("Inside the verify token");
@@ -246,6 +246,63 @@ async function run() {
                 status: true,
                 userInfo: userExist
             })
+        })
+
+        app.patch('/profile/:email', async (req, res) => {
+            const email = req.params.email;
+            const body = req.body;
+            let user = await usersCollection.findOne({ email })
+            if (!user) {
+                res.json({ status: false, message: "User not found" })
+                return
+            }
+            try {
+                const updateFields = {};
+
+                // Direct fields
+                if (body.name) updateFields.name = body.name;
+                if (body.phone) updateFields.phone = body.phone;
+                if (body.dateOfBirth) updateFields.dateOfBirth = body.dateOfBirth;
+                if (body.gender) updateFields.gender = body.gender;
+                if (body.address) updateFields.address = body.address;
+
+                // Emergency contact
+                if (body.emergencyContact) {
+                    if (body.emergencyContact.name) updateFields["emergencyContact.name"] = body.emergencyContact.name;
+                    if (body.emergencyContact.relationship) updateFields["emergencyContact.relationship"] = body.emergencyContact.relationship;
+                    if (body.emergencyContact.phone) updateFields["emergencyContact.phone"] = body.emergencyContact.phone;
+                }
+
+                // Medical info
+                if (body.medicalInfo) {
+                    if (body.medicalInfo.allergies) updateFields["medicalInfo.allergies"] = body.medicalInfo.allergies;
+                    if (body.medicalInfo.medications) updateFields["medicalInfo.medications"] = body.medicalInfo.medications;
+                    if (body.medicalInfo.conditions) updateFields["medicalInfo.conditions"] = body.medicalInfo.conditions;
+                    if (body.medicalInfo.bloodType) updateFields["medicalInfo.bloodType"] = body.medicalInfo.bloodType;
+                }
+
+                // Insurance
+                if (body.insurance) {
+                    if (body.insurance.provider) updateFields["insurance.provider"] = body.insurance.provider;
+                    if (body.insurance.policyNumber) updateFields["insurance.policyNumber"] = body.insurance.policyNumber;
+                    if (body.insurance.groupNumber) updateFields["insurance.groupNumber"] = body.insurance.groupNumber;
+                    if (body.insurance.primaryHolder) updateFields["insurance.primaryHolder"] = body.insurance.primaryHolder;
+                }
+
+                const result = await usersCollection.updateOne(
+                    { email: email },
+                    { $set: updateFields },
+                    { upsert: true }
+                );
+
+                res.status(200).json({
+                    message: "Profile updated successfully",
+                    result
+                });
+            } catch (error) {
+                console.error("Error updating profile:", error);
+                res.status(500).json({ message: "Server error" });
+            }
         })
 
         // reset password API 
@@ -488,8 +545,8 @@ async function run() {
             })
         })
         //get all doctors
-        app.get('/doctor/:role',async(req,res)=>{
-            const role=req.params.role
+        app.get('/doctor/:role', async (req, res) => {
+            const role = req.params.role
             const query = { userType: role }
             const doctors = await usersCollection.find(query).toArray();
             res.json({
@@ -515,7 +572,7 @@ async function run() {
                 formData.append("image", fs.createReadStream(filePath));
 
                 const response = await axios.post("http://127.0.0.1:8000/predict", formData, {
-                    headers: { "Content-Type":"multipart/form-data" },
+                    headers: { "Content-Type": "multipart/form-data" },
                 });
 
                 res.json(response.data);
