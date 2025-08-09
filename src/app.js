@@ -305,6 +305,23 @@ async function run() {
             }
         })
 
+        //get Booked appointments API
+        app.get('/booked-appointments/:email', async (req, res) => {
+            const email = req.params.email
+            const query = { email: email }
+            const bookedAppointments = await BookingCollection.find(query).toArray();
+            if (bookedAppointments.length === 0) {
+                return res.json({
+                    status: false,
+                    message: "No appointments found for this email"
+                });
+            }
+            res.json({
+                status: true,
+                message: "Booked appointments fetched successfully",
+                data: bookedAppointments
+            });
+        })
         // reset password API 
         app.get('/reset-password/:email', async (req, res) => {
             const email = req.params.email
