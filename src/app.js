@@ -239,13 +239,17 @@ async function run() {
         app.get('/signin/:email', async (req, res) => {
             const email = req.params.email
             const userExist = await usersCollection.findOne({ email: email })
+            const newuser={
+                ...userExist,
+                lastLoginTime: new Date().toISOString()
+            }
             if (!userExist) {
                 res.json({ status: false, message: "User Not Found" })
                 return
             }
             res.json({
                 status: true,
-                userInfo: userExist
+                userInfo: newuser,
             })
         })
 
