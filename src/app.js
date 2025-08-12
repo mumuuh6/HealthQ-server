@@ -13,6 +13,7 @@ const multer = require("multer");
 const axios = require("axios");
 const fs = require("fs");
 const FormData = require("form-data");
+const e = require('express');
 
 
 
@@ -127,7 +128,7 @@ async function run() {
                     }
 
                     const updateBody = {
-                        ...body, role: "user", failedAttempts: 0, block: false
+                        ...body, failedAttempts: 0, block: false
                     }
 
                     const result = await usersCollection.insertOne(updateBody)
@@ -250,6 +251,7 @@ async function run() {
 
         app.patch('/profile/:email', async (req, res) => {
             const email = req.params.email;
+            console.log("Updating profile for email:", email);
             const body = req.body;
             let user = await usersCollection.findOne({ email })
             if (!user) {
@@ -259,36 +261,56 @@ async function run() {
             try {
                 const updateFields = {};
 
-                // Direct fields
-                if (body.name) updateFields.name = body.name;
-                if (body.phone) updateFields.phone = body.phone;
-                if (body.dateOfBirth) updateFields.dateOfBirth = body.dateOfBirth;
-                if (body.gender) updateFields.gender = body.gender;
-                if (body.address) updateFields.address = body.address;
+                if (user.userType === 'patient') {
+                    // Direct fields
+                    if (body.name) updateFields.name = body.name;
+                    if (body.phone) updateFields.phone = body.phone;
+                    if (body.dateOfBirth) updateFields.dateOfBirth = body.dateOfBirth;
+                    if (body.gender) updateFields.gender = body.gender;
+                    if (body.address) updateFields.address = body.address;
 
-                // Emergency contact
-                if (body.emergencyContact) {
-                    if (body.emergencyContact.name) updateFields["emergencyContact.name"] = body.emergencyContact.name;
-                    if (body.emergencyContact.relationship) updateFields["emergencyContact.relationship"] = body.emergencyContact.relationship;
-                    if (body.emergencyContact.phone) updateFields["emergencyContact.phone"] = body.emergencyContact.phone;
+                    // Emergency contact
+                    if (body.emergencyContact) {
+                        if (body.emergencyContact.name) updateFields["emergencyContact.name"] = body.emergencyContact.name;
+                        if (body.emergencyContact.relationship) updateFields["emergencyContact.relationship"] = body.emergencyContact.relationship;
+                        if (body.emergencyContact.phone) updateFields["emergencyContact.phone"] = body.emergencyContact.phone;
+                    }
+
+                    // Medical info
+                    if (body.medicalInfo) {
+                        if (body.medicalInfo.allergies) updateFields["medicalInfo.allergies"] = body.medicalInfo.allergies;
+                        if (body.medicalInfo.medications) updateFields["medicalInfo.medications"] = body.medicalInfo.medications;
+                        if (body.medicalInfo.conditions) updateFields["medicalInfo.conditions"] = body.medicalInfo.conditions;
+                        if (body.medicalInfo.bloodType) updateFields["medicalInfo.bloodType"] = body.medicalInfo.bloodType;
+                    }
+
+                    // Insurance
+                    if (body.insurance) {
+                        if (body.insurance.provider) updateFields["insurance.provider"] = body.insurance.provider;
+                        if (body.insurance.policyNumber) updateFields["insurance.policyNumber"] = body.insurance.policyNumber;
+                        if (body.insurance.groupNumber) updateFields["insurance.groupNumber"] = body.insurance.groupNumber;
+                        if (body.insurance.primaryHolder) updateFields["insurance.primaryHolder"] = body.insurance.primaryHolder;
+                    }
                 }
+                else if (user.userType === 'doctor') {
+                    // Direct fields
+                    if (body.name) updateFields.name = body.name;
+                    if (body.specialty) updateFields.specialty = body.specialty;
+                    if (body.phone) updateFields.phone = body.phone;
+                    if (body.address) updateFields.address = body.address;
+                    if (body.bio) updateFields.bio = body.bio;
+                    if (body.email) updateFields.email = body.email;
 
-                // Medical info
-                if (body.medicalInfo) {
-                    if (body.medicalInfo.allergies) updateFields["medicalInfo.allergies"] = body.medicalInfo.allergies;
-                    if (body.medicalInfo.medications) updateFields["medicalInfo.medications"] = body.medicalInfo.medications;
-                    if (body.medicalInfo.conditions) updateFields["medicalInfo.conditions"] = body.medicalInfo.conditions;
-                    if (body.medicalInfo.bloodType) updateFields["medicalInfo.bloodType"] = body.medicalInfo.bloodType;
+                    // // Education array
+                    // if (Array.isArray(body.education)) {
+                    //     updateFields.education = body.education;
+                    // }
+
+                    // // Certifications array
+                    // if (Array.isArray(body.certifications)) {
+                    //     updateFields.certifications = body.certifications;
+                    // }
                 }
-
-                // Insurance
-                if (body.insurance) {
-                    if (body.insurance.provider) updateFields["insurance.provider"] = body.insurance.provider;
-                    if (body.insurance.policyNumber) updateFields["insurance.policyNumber"] = body.insurance.policyNumber;
-                    if (body.insurance.groupNumber) updateFields["insurance.groupNumber"] = body.insurance.groupNumber;
-                    if (body.insurance.primaryHolder) updateFields["insurance.primaryHolder"] = body.insurance.primaryHolder;
-                }
-
                 const result = await usersCollection.updateOne(
                     { email: email },
                     { $set: updateFields },
@@ -574,12 +596,31 @@ async function run() {
         })
         // find the role of user 
         app.get('/find/role/:email', async (req, res) => {
-            const email = req.params.email
-            const user = await usersCollection.findOne({ email: email })
-            res.json({
-                userType: user?.userType
-            })
-        })
+            try {
+                const email = req.params.email;
+                const user = await usersCollection.findOne({ email: email });
+                
+                if (!user) {
+                    return res.status(404).json({ error: "User not found" });
+                }
+                const query = { doctorId: user?._id.toString() };
+                const doctorpatient = await BookingCollection.find(
+                    query,
+                ).toArray();
+                
+                if (!doctorpatient) {
+                    return res.status(404).json({ error: "No patients found for this doctor" });
+                }
+                res.json({
+                    userType: user.userType,
+                    PatientData: doctorpatient || null,
+                });
+            } catch (error) {
+                console.error("Error fetching user role:", error);
+                res.status(500).json({ error: "Internal Server Error" });
+            }
+        });
+
 
         // predict melanoma percentage 
         app.post("/predict", upload.single("photo"), async (req, res) => {
