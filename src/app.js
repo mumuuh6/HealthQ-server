@@ -66,6 +66,7 @@ async function run() {
         // Users Collection 
         const usersCollection = database.collection("users")
         const BookingCollection = database.collection("bookings")
+        const medinicineCollection = database.collection("medicines")
 
         // verify token middleware
         const verifyToken = (req, res, next) => {
@@ -330,7 +331,33 @@ async function run() {
                 res.status(500).json({ message: "Server error" });
             }
         })
-
+        //get all medicines API
+        app.get('/medicines', async (req, res) => {
+            
+            
+            const user = await medinicineCollection
+                .find().toArray();
+                console.log(user.length);
+            if (!user) {
+                return res.status(404).json({ message: "User not found" });
+            }
+            res.status(200).json({
+                message: "Profile fetched successfully",
+                user
+            });
+        });
+        //get medicine by id API
+        app.get('/medicines/:slug', async (req, res) => {
+            const slug = req.params.slug;
+            const medicine = await medinicineCollection.findOne({ slug: slug });
+            if (!medicine) {
+                return res.status(404).json({ message: "Medicine not found" });
+            }
+            res.status(200).json({
+                // message: "Medicine fetched successfully",
+                medicine
+            });
+        });
         //get Booked appointments API
         app.get('/booked-appointments/:email', async (req, res) => {
             const email = req.params.email
