@@ -256,8 +256,9 @@ async function run() {
 
         app.patch('/profile/:email', async (req, res) => {
             const email = req.params.email;
-            console.log("Updating profile for email:", email);
+           // console.log("Updating profile for email:", email);
             const body = req.body;
+            //console.log("Request body:", body);
             let user = await usersCollection.findOne({ email })
             if (!user) {
                 res.json({ status: false, message: "User not found" })
@@ -273,6 +274,7 @@ async function run() {
                     if (body.dateOfBirth) updateFields.dateOfBirth = body.dateOfBirth;
                     if (body.gender) updateFields.gender = body.gender;
                     if (body.address) updateFields.address = body.address;
+                    if (body.age) updateFields.age = body.age;
 
                     // Emergency contact
                     if (body.emergencyContact) {
@@ -316,6 +318,7 @@ async function run() {
                     //     updateFields.certifications = body.certifications;
                     // }
                 }
+               // console.log("Update fields:", updateFields);
                 const result = await usersCollection.updateOne(
                     { email: email },
                     { $set: updateFields },
@@ -337,7 +340,7 @@ async function run() {
             
             const user = await medinicineCollection
                 .find().toArray();
-                console.log(user.length);
+                //console.log(user.length);
             if (!user) {
                 return res.status(404).json({ message: "User not found" });
             }
@@ -606,7 +609,7 @@ async function run() {
         //book appointment API
         app.post('/book-appointment', async (req, res) => {
             const body = req.body
-            console.log(body);
+            //console.log(body);
             const result = await BookingCollection.insertOne(body)
             res.json({
                 status: true,
