@@ -30,7 +30,7 @@ app.use(cors({
 
 app.use(cors())
 app.use(cookieParser());
-//console.log(process.env.GOOGLE_CLIENT_ID);
+//console.log(process.env.GOOGLE_Client_ID);
 // MongoDB connection
 const uri = `mongodb+srv://${process.env.USER_NAME}:${process.env.PASSWORD}@cluster0.4ayta.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -660,8 +660,8 @@ async function run() {
             const redirectPath = req.query.redirect
 
             const oauth2Client = new google.auth.OAuth2(
-                process.env.GOOGLE_CLIENT_ID,
-                process.env.GOOGLE_CLIENT_SECRET,
+                process.env.GOOGLE_Client_ID,
+                process.env.GOOGLE_Client_Secret,
                 process.env.GOOGLE_REDIRECT_URI
             );
             //const state = JSON.stringify({ email: 'mahmudaaktermumu7@gmail.com' });
@@ -696,8 +696,8 @@ async function run() {
             }
             console.log('Received code:', code);
             const oauth2Client = new google.auth.OAuth2(
-                process.env.GOOGLE_CLIENT_ID,
-                process.env.GOOGLE_CLIENT_SECRET,
+                process.env.GOOGLE_Client_ID,
+                process.env.GOOGLE_Client_Secret,
                 process.env.GOOGLE_REDIRECT_URI
             );
 
@@ -717,7 +717,7 @@ async function run() {
                 
             } catch (error) {
                 console.error(error);
-                res.status(500).send('Error connecting Google Calender');
+                res.status(500).send('Error connecting Google Calendar');
                 res.redirect(`${origin}${redirectPath}?calendar=error`);
             }
         });
@@ -730,8 +730,8 @@ async function run() {
         //     if (!doctor?.googleTokens) return res.status(400).send('Doctor not connected to Google');
 
         //     const oauth2Client = new google.auth.OAuth2(
-        //         process.env.GOOGLE_CLIENT_ID,
-        //         process.env.GOOGLE_CLIENT_SECRET
+        //         process.env.GOOGLE_Client_ID,
+        //         process.env.GOOGLE_Client_Secret
         //     );
         //     oauth2Client.setCredentials(doctor.googleTokens);
 
@@ -768,8 +768,8 @@ async function run() {
     if (!doctor?.googleTokens) return res.status(400).send('Doctor not connected to Google');
 
     const oauth2Client = new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID,
-        process.env.GOOGLE_CLIENT_SECRET
+        process.env.GOOGLE_Client_ID,
+        process.env.GOOGLE_Client_Secret
     );
     oauth2Client.setCredentials(doctor.googleTokens);
 
