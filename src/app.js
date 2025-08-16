@@ -383,7 +383,7 @@ async function run() {
             const email = req.params.email
             const userExist = await usersCollection.findOne({ email: email })
             if (!userExist) {
-                res.json({ status: false, message: "User Not Found!" })
+                res.json({ status: false, message: "Use Not Found!" })
                 return
             }
 
