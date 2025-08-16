@@ -1,5 +1,5 @@
 require('dotenv').config();
-
+//const dotenv = require('dotenv');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const express = require('express');
 const morgan = require('morgan');
@@ -8,14 +8,14 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const bcrypt = require("bcrypt");
+const { google } = require('googleapis');
+
 const nodemailer = require('nodemailer')
 const multer = require("multer");
 const axios = require("axios");
 const fs = require("fs");
 const FormData = require("form-data");
 const e = require('express');
-
-
 
 const app = express()
 app.use(express.json())
@@ -30,7 +30,7 @@ app.use(cors({
 
 app.use(cors())
 app.use(cookieParser());
-
+//console.log(process.env.GOOGLE_CLIENT_ID);
 // MongoDB connection
 const uri = `mongodb+srv://${process.env.USER_NAME}:${process.env.PASSWORD}@cluster0.4ayta.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -240,7 +240,7 @@ async function run() {
         app.get('/signin/:email', async (req, res) => {
             const email = req.params.email
             const userExist = await usersCollection.findOne({ email: email })
-            const newuser={
+            const newuser = {
                 ...userExist,
                 lastLoginTime: new Date().toISOString()
             }
@@ -256,7 +256,7 @@ async function run() {
 
         app.patch('/profile/:email', async (req, res) => {
             const email = req.params.email;
-           // console.log("Updating profile for email:", email);
+            // console.log("Updating profile for email:", email);
             const body = req.body;
             //console.log("Request body:", body);
             let user = await usersCollection.findOne({ email })
@@ -318,7 +318,7 @@ async function run() {
                     //     updateFields.certifications = body.certifications;
                     // }
                 }
-               // console.log("Update fields:", updateFields);
+                // console.log("Update fields:", updateFields);
                 const result = await usersCollection.updateOne(
                     { email: email },
                     { $set: updateFields },
@@ -336,11 +336,11 @@ async function run() {
         })
         //get all medicines API
         app.get('/medicines', async (req, res) => {
-            
-            
+
+
             const user = await medinicineCollection
                 .find().toArray();
-                //console.log(user.length);
+            //console.log(user.length);
             if (!user) {
                 return res.status(404).json({ message: "User not found" });
             }
@@ -633,7 +633,7 @@ async function run() {
             try {
                 const email = req.params.email;
                 const user = await usersCollection.findOne({ email: email });
-                
+
                 if (!user) {
                     return res.status(404).json({ error: "User not found" });
                 }
@@ -641,7 +641,7 @@ async function run() {
                 const doctorpatient = await BookingCollection.find(
                     query,
                 ).toArray();
-                
+
                 if (!doctorpatient) {
                     return res.status(404).json({ error: "No patients found for this doctor" });
                 }
@@ -654,9 +654,162 @@ async function run() {
                 res.status(500).json({ error: "Internal Server Error" });
             }
         });
+        //google auth API
+        app.get('/auth/google', (req, res) => {
+            const email=req.query.email;
+            const redirectPath = req.query.redirect
 
+            const oauth2Client = new google.auth.OAuth2(
+                process.env.GOOGLE_CLIENT_ID,
+                process.env.GOOGLE_CLIENT_SECRET,
+                process.env.GOOGLE_REDIRECT_URI
+            );
+            //const state = JSON.stringify({ email: 'mahmudaaktermumu7@gmail.com' });
+
+            //console.log("j",process.env.GOOGLE_REDIRECT_URI)
+            const scopes = [
+                'https://www.googleapis.com/auth/calendar.events',
+                'https://www.googleapis.com/auth/userinfo.email',
+                'https://www.googleapis.com/auth/userinfo.profile'
+            ];
+
+            const authUrl = oauth2Client.generateAuthUrl({
+                access_type: 'offline',
+                scope: scopes,
+                prompt: 'consent',
+                state:JSON.stringify({ email: email ,redirect:redirectPath}) // Pass the email in state
+            });
+
+            res.redirect(authUrl);
+        });
+        
+        // Suppose you know the doctor email in your frontend or backend
+
+
+
+        app.get('/api/google/callback', async (req, res) => {
+            const origin = req.get('origin') || 'http://localhost:3000';
+            const code = req.query.code;
+            const state = JSON.parse(req.query.state || '{}');
+            const email=state.email;
+            const redirectPath = state.redirect
+            //console.log('State email:', email,state); 
+            if(!code || !email) {
+                return res.status(400).send('Invalid request');
+            }
+            console.log('Received code:', code);
+            const oauth2Client = new google.auth.OAuth2(
+                process.env.GOOGLE_CLIENT_ID,
+                process.env.GOOGLE_CLIENT_SECRET,
+                process.env.GOOGLE_REDIRECT_URI
+            );
+
+            try {
+                const { tokens } = await oauth2Client.getToken(code);
+                oauth2Client.setCredentials(tokens);
+                //console.log('tokens', tokens);
+                // Save tokens to MongoDB for the doctor
+               // const doctorsCollection = client.db('HealthQ').collection('users');
+                const result=await usersCollection.updateOne(
+                    { email },  // or req.user.email if using auth
+                    { $set: { googleTokens: tokens } }
+                );
+                //console.log('result', result);
+                res.redirect(`${origin}${redirectPath}?calendar=connected`);
+                //res.send('Google Calendar connected successfully!');
+                
+            } catch (error) {
+                console.error(error);
+                res.status(500).send('Error connecting Google Calendar');
+                res.redirect(`http://localhost:3000${redirectPath}?calendar=error`);
+            }
+        });
+        // app.post('/api/google/create-event', async (req, res) => {
+        //     const { doctorEmail, patientEmail, date, time, summary } = req.body;
+
+        //     // const doctorsCollection = client.db('HealthQ').collection('users');
+        //     const doctor = await usersCollection.findOne({ email: doctorEmail });
+
+        //     if (!doctor?.googleTokens) return res.status(400).send('Doctor not connected to Google');
+
+        //     const oauth2Client = new google.auth.OAuth2(
+        //         process.env.GOOGLE_CLIENT_ID,
+        //         process.env.GOOGLE_CLIENT_SECRET
+        //     );
+        //     oauth2Client.setCredentials(doctor.googleTokens);
+
+        //     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+        //     const event = {
+        //         summary: summary || 'HealthQ Appointment',
+        //         description: `Appointment with ${patientEmail}`,
+        //         start: { dateTime: new Date(`${date}T${time}`), timeZone: 'Asia/Dhaka' },
+        //         end: { dateTime: new Date(`${date}T${time}` + 30 * 60 * 1000), timeZone: 'Asia/Dhaka' },
+        //         attendees: [{ email: patientEmail }],
+        //         conferenceData: { createRequest: { requestId: `meet-${Date.now()}` } }
+        //     };
+
+        //     try {
+        //         const response = await calendar.events.insert({
+        //             calendarId: 'primary',
+        //             resource: event,
+        //             conferenceDataVersion: 1
+        //         });
+
+        //         res.json({ status: true, meetLink: response.data.hangoutLink, eventId: response.data.id });
+        //     } catch (error) {
+        //         console.error(error);
+        //         res.status(500).json({ status: false, message: 'Failed to create event', error: error.message });
+        //     }
+        // });
 
         // predict melanoma percentage 
+        app.post('/api/google/create-event', async (req, res) => {
+    const { doctorEmail, patientEmail, date, time, summary } = req.body;
+
+    const doctor = await usersCollection.findOne({ email: doctorEmail });
+    if (!doctor?.googleTokens) return res.status(400).send('Doctor not connected to Google');
+
+    const oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET
+    );
+    oauth2Client.setCredentials(doctor.googleTokens);
+
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+    // Combine date and time into a Date object
+    const [hours, minutes] = time.split(':').map(Number);
+    const startDate = new Date(date);
+    startDate.setHours(hours, minutes, 0, 0);
+
+    const endDate = new Date(startDate.getTime() + 30 * 60 * 1000); // +30 min
+
+    const event = {
+        summary: summary || 'HealthQ Appointment',
+        description: `Appointment with ${patientEmail}`,
+        start: { dateTime: startDate.toISOString(), timeZone: 'Asia/Dhaka' },
+        end: { dateTime: endDate.toISOString(), timeZone: 'Asia/Dhaka' },
+        attendees: [{ email: patientEmail }],
+        conferenceData: { createRequest: { requestId: `meet-${Date.now()}` } }
+    };
+
+    try {
+        const response = await calendar.events.insert({
+            calendarId: 'primary',
+            resource: event,
+            conferenceDataVersion: 1
+        });
+
+        res.json({ status: true, meetLink: response.data.hangoutLink, eventId: response.data.id });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ status: false, message: 'Failed to create event', error: error.message });
+    }
+});
+
+        
+        
         app.post("/predict", upload.single("photo"), async (req, res) => {
             try {
                 const filePath = req.file.path;
