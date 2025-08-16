@@ -379,182 +379,182 @@ async function run() {
             });
         })
         // reset password API 
-        app.get('/reset-password/:email', async (req, res) => {
-            const email = req.params.email
-            const userExist = await usersCollection.findOne({ email: email })
-            if (!userExist) {
-                res.json({ status: false, message: "User Not Found!" })
-                return
-            }
+        // app.get('/reset-password/:email', async (req, res) => {
+        //     const email = req.params.email
+        //     const userExist = await usersCollection.findOne({ email: email })
+        //     if (!userExist) {
+        //         res.json({ status: false, message: "User Not Found!" })
+        //         return
+        //     }
 
-            const expireUserExist = await expireCollection.findOne({ email: email })
+        //     const expireUserExist = await expireCollection.findOne({ email: email })
 
-            if (!expireUserExist) {
-                await expireCollection.insertOne({
-                    email: email,
-                    expiresAt: new Date(Date.now() + 1000 * 60 * 5), // 5 min
-                })
-            }
+        //     if (!expireUserExist) {
+        //         await expireCollection.insertOne({
+        //             email: email,
+        //             expiresAt: new Date(Date.now() + 1000 * 60 * 5), // 5 min
+        //         })
+        //     }
 
-            if (expireUserExist) {
-                await expireCollection.updateOne({ email: email }, {
-                    $set: {
-                        expiresAt: new Date(Date.now() + 1000 * 60 * 5), // 5 min
-                    }
-                })
-            }
+        //     if (expireUserExist) {
+        //         await expireCollection.updateOne({ email: email }, {
+        //             $set: {
+        //                 expiresAt: new Date(Date.now() + 1000 * 60 * 5), // 5 min
+        //             }
+        //         })
+        //     }
 
-            const html = `
-            <!DOCTYPE html>
-            <html lang="en">
-              <head>
-                <meta charset="UTF-8" />
-                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-                <title>Reset Your Password - QuizMania</title>
-                <style>
-                  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+        //     const html = `
+        //     <!DOCTYPE html>
+        //     <html lang="en">
+        //       <head>
+        //         <meta charset="UTF-8" />
+        //         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        //         <title>Reset Your Password - QuizMania</title>
+        //         <style>
+        //           @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
             
-                  body {
-                    font-family: 'Poppins', sans-serif;
-                    background-color: #f3f4f6;
-                    margin: 0;
-                    padding: 0;
-                    color: #1f2937;
-                  }
+        //           body {
+        //             font-family: 'Poppins', sans-serif;
+        //             background-color: #f3f4f6;
+        //             margin: 0;
+        //             padding: 0;
+        //             color: #1f2937;
+        //           }
             
-                  .email-container {
-                    max-width: 600px;
-                    margin: 40px auto;
-                    background-color: #ffffff;
-                    border-radius: 10px;
-                    overflow: hidden;
-                    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
-                  }
+        //           .email-container {
+        //             max-width: 600px;
+        //             margin: 40px auto;
+        //             background-color: #ffffff;
+        //             border-radius: 10px;
+        //             overflow: hidden;
+        //             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+        //           }
             
-                  .email-header {
-                    background-color: #8b5cf6;
-                    padding: 30px 20px;
-                    text-align: center;
-                  }
+        //           .email-header {
+        //             background-color: #8b5cf6;
+        //             padding: 30px 20px;
+        //             text-align: center;
+        //           }
             
-                  .logo {
-                    font-size: 26px;
-                    font-weight: 700;
-                    color: #ffffff;
-                    letter-spacing: 1px;
-                  }
+        //           .logo {
+        //             font-size: 26px;
+        //             font-weight: 700;
+        //             color: #ffffff;
+        //             letter-spacing: 1px;
+        //           }
             
-                  .email-body {
-                    padding: 40px 30px;
-                  }
+        //           .email-body {
+        //             padding: 40px 30px;
+        //           }
             
-                  .greeting {
-                    font-size: 20px;
-                    font-weight: 600;
-                    margin-bottom: 20px;
-                  }
+        //           .greeting {
+        //             font-size: 20px;
+        //             font-weight: 600;
+        //             margin-bottom: 20px;
+        //           }
             
-                  .message {
-                    font-size: 16px;
-                    line-height: 1.6;
-                    margin-bottom: 25px;
-                  }
+        //           .message {
+        //             font-size: 16px;
+        //             line-height: 1.6;
+        //             margin-bottom: 25px;
+        //           }
             
-                  .reset-button {
-                    display: inline-block;
-                    background-color: #8b5cf6;
-                    color: #ffffff !important;
-                    text-decoration: none;
-                    padding: 14px 36px;
-                    border-radius: 8px;
-                    font-weight: 600;
-                    font-size: 16px;
-                    transition: background-color 0.3s ease;
-                  }
+        //           .reset-button {
+        //             display: inline-block;
+        //             background-color: #8b5cf6;
+        //             color: #ffffff !important;
+        //             text-decoration: none;
+        //             padding: 14px 36px;
+        //             border-radius: 8px;
+        //             font-weight: 600;
+        //             font-size: 16px;
+        //             transition: background-color 0.3s ease;
+        //           }
             
-                  .reset-button:hover {
-                    background-color: #7c3aed;
-                  }
+        //           .reset-button:hover {
+        //             background-color: #7c3aed;
+        //           }
             
-                  .warning {
-                    font-size: 14px;
-                    color: #6b7280;
-                    margin-top: 30px;
-                    font-style: italic;
-                  }
+        //           .warning {
+        //             font-size: 14px;
+        //             color: #6b7280;
+        //             margin-top: 30px;
+        //             font-style: italic;
+        //           }
             
-                  .email-footer {
-                    background-color: #f9fafb;
-                    padding: 20px;
-                    text-align: center;
-                    font-size: 14px;
-                    color: #6b7280;
-                  }
+        //           .email-footer {
+        //             background-color: #f9fafb;
+        //             padding: 20px;
+        //             text-align: center;
+        //             font-size: 14px;
+        //             color: #6b7280;
+        //           }
             
-                  @media only screen and (max-width: 600px) {
-                    .email-body {
-                      padding: 30px 20px;
-                    }
+        //           @media only screen and (max-width: 600px) {
+        //             .email-body {
+        //               padding: 30px 20px;
+        //             }
             
-                    .reset-button {
-                      width: 100%;
-                      padding: 14px 0;
-                    }
+        //             .reset-button {
+        //               width: 100%;
+        //               padding: 14px 0;
+        //             }
             
-                    .logo {
-                      font-size: 22px;
-                    }
-                  }
-                </style>
-              </head>
-              <body>
-                <div class="email-container">
-                  <div class="email-header">
-                    <div class="logo">QuizMania</div>
-                  </div>
-                  <div class="email-body">
-                    <div class="greeting">Hi, ${userExist.username}</div>
-                    <div class="message">
-                      We received a request to reset the password associated with your QuizMania account.
-                      Click the button below to continue with the reset process.
-                    </div>
-                    <a href="https://quizzmaniaa.vercel.app/auth/reset-password?secretcode=${userExist?._id}" class="reset-button">Reset Password</a>
-                    <div class="warning">
-                      This link will expire in 5 minutes for your security. If you didn’t request this, no action is required.
-                    </div>
-                  </div>
-                  <div class="email-footer">
-                    &copy; ${new Date().getFullYear()} QuizMania. All rights reserved.
-                  </div>
-                </div>
-              </body>
-            </html>
-            `;
-
-
-            const transporter = nodemailer.createTransport({
-                service: "gmail",
-                auth: {
-                    user: process.env.GOOGLE_ACCOUNT_USER,
-                    pass: process.env.GOOGLE_ACCOUNT_PASS,
-                },
-            })
-
-            const info = await transporter.sendMail({
-                from: `"QuizMania" <noreply@quizmania.com>`,
-                to: email,
-                subject: `Reset your QuizMania password`,
-                html: html,
-            })
+        //             .logo {
+        //               font-size: 22px;
+        //             }
+        //           }
+        //         </style>
+        //       </head>
+        //       <body>
+        //         <div class="email-container">
+        //           <div class="email-header">
+        //             <div class="logo">QuizMania</div>
+        //           </div>
+        //           <div class="email-body">
+        //             <div class="greeting">Hi, ${userExist.username}</div>
+        //             <div class="message">
+        //               We received a request to reset the password associated with your QuizMania account.
+        //               Click the button below to continue with the reset process.
+        //             </div>
+        //             <a href="https://quizzmaniaa.vercel.app/auth/reset-password?secretcode=${userExist?._id}" class="reset-button">Reset Password</a>
+        //             <div class="warning">
+        //               This link will expire in 5 minutes for your security. If you didn’t request this, no action is required.
+        //             </div>
+        //           </div>
+        //           <div class="email-footer">
+        //             &copy; ${new Date().getFullYear()} QuizMania. All rights reserved.
+        //           </div>
+        //         </div>
+        //       </body>
+        //     </html>
+        //     `;
 
 
-            res.json({
-                status: true,
-                message: "Email send successfully, Check inbox or spam of email",
-                email: email,
-                info: info,
-            });
-        })
+        //     const transporter = nodemailer.createTransport({
+        //         service: "gmail",
+        //         auth: {
+        //             user: process.env.GOOGLE_ACCOUNT_USER,
+        //             pass: process.env.GOOGLE_ACCOUNT_PASS,
+        //         },
+        //     })
+
+        //     const info = await transporter.sendMail({
+        //         from: `"QuizMania" <noreply@quizmania.com>`,
+        //         to: email,
+        //         subject: `Reset your QuizMania password`,
+        //         html: html,
+        //     })
+
+
+        //     res.json({
+        //         status: true,
+        //         message: "Email send successfully, Check inbox or spam of email",
+        //         email: email,
+        //         info: info,
+        //     });
+        // })
 
         // reset password request confirmation API 
         app.patch('/reset-password/:id', async (req, res) => {
@@ -683,12 +683,9 @@ async function run() {
             res.redirect(authUrl);
         });
         
-        // Suppose you know the doctor email in your frontend or backend
-
-
-
         app.get('/api/google/callback', async (req, res) => {
             const origin = req.get('origin') || 'http://localhost:3000';
+            console.log('Origin:', origin);
             const code = req.query.code;
             const state = JSON.parse(req.query.state || '{}');
             const email=state.email;
@@ -720,8 +717,8 @@ async function run() {
                 
             } catch (error) {
                 console.error(error);
-                res.status(500).send('Error connecting Google Calendar');
-                res.redirect(`http://localhost:3000${redirectPath}?calendar=error`);
+                res.status(500).send('Error connecting Google Calender');
+                res.redirect(`${origin}${redirectPath}?calendar=error`);
             }
         });
         // app.post('/api/google/create-event', async (req, res) => {
