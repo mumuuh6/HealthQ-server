@@ -684,8 +684,7 @@ async function run() {
         });
         
         app.get('/api/google/callback', async (req, res) => {
-            const origin = req.get('origin') || 'http://localhost:3000';
-            console.log('Origin:', origin);
+            
             const code = req.query.code;
             const state = JSON.parse(req.query.state || '{}');
             const email=state.email;
@@ -712,13 +711,13 @@ async function run() {
                     { $set: { googleTokens: tokens } }
                 );
                 //console.log('result', result);
-                res.redirect(`${origin}${redirectPath}?calendar=connected`);
+                res.redirect(`https://healthq.vercel.app/${redirectPath}?calendar=connected`);
                 //res.send('Google Calendar connected successfully!');
                 
             } catch (error) {
                 console.error(error);
                 res.status(500).send('Error connecting Google Calendar');
-                res.redirect(`${origin}${redirectPath}?calendar=error`);
+                res.redirect(`https://healthq.vercel.app/${redirectPath}?calendar=error`);
             }
         });
         // app.post('/api/google/create-event', async (req, res) => {
