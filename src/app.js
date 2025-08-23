@@ -140,12 +140,12 @@ async function run() {
                     })
                 }
                 else {
-                    const { password,userType, ...user } = req.body;
-                    
-                    const existingUser = await usersCollection.findOne({ email: user?.email });
-                    
+                    const { password, userType, ...user } = req.body;
 
-                    
+                    const existingUser = await usersCollection.findOne({ email: user?.email });
+
+
+
                     if (existingUser) {
                         return res.json({
                             status: false,
@@ -153,29 +153,29 @@ async function run() {
                             data: result
                         });
                     }
-                    if(userType==='doctor'){
-                        const existingpeople=await usersCollection.find({userType:userType}).toArray()
-                        
-                        const doctorid=existingpeople.length+1;
-                       
+                    if (userType === 'doctor') {
+                        const existingpeople = await usersCollection.find({ userType: userType }).toArray()
+
+                        const doctorid = existingpeople.length + 1;
+
                         const hashedPass = await bcrypt.hash(password, 10)
 
-                    const withRole = {
-                        ...user, password: hashedPass,userType,
-                    Doctor_ID:`D0000${doctorid}`, failedAttempts: 0, block: false
-                    }
-                    const insertResult = await usersCollection.insertOne(withRole);
-                    return res.json({
-                        status: true,
-                        message: 'User added successfully',
-                        data: insertResult
-                    });
+                        const withRole = {
+                            ...user, password: hashedPass, userType,
+                            Doctor_ID: `D0000${doctorid}`, failedAttempts: 0, block: false
+                        }
+                        const insertResult = await usersCollection.insertOne(withRole);
+                        return res.json({
+                            status: true,
+                            message: 'User added successfully',
+                            data: insertResult
+                        });
                     }
                     const hashedPass = await bcrypt.hash(password, 10)
 
                     const withRole = {
-                        ...user, password: hashedPass,userType,
-                     failedAttempts: 0, block: false
+                        ...user, password: hashedPass, userType,
+                        failedAttempts: 0, block: false
                     }
                     const insertResult = await usersCollection.insertOne(withRole);
                     return res.json({
@@ -342,7 +342,7 @@ async function run() {
                     //     updateFields.certifications = body.certifications;
                     // }
                 }
-                // console.log("Update fields:", updateFields);
+                console.log("Update fields:", updateFields);
                 const result = await usersCollection.updateOne(
                     { email: email },
                     { $set: updateFields },
@@ -634,6 +634,23 @@ async function run() {
         app.post('/book-appointment', async (req, res) => {
             const body = req.body
             //console.log(body);
+            const doctorEmail = body.docotorEmail;
+            const date = body.date;                // should be in ISO string
+            const timeSlotId = body.timeSlotId;
+
+            // Find how many existing bookings match this doctor, date, and slot
+            const count = await BookingCollection.countDocuments({
+                docotorEmail: doctorEmail,
+                date: date,
+                timeSlotId: timeSlotId,
+            });
+            // Assign queue position
+            const queuePosition = count + 1;
+            // Add it to the body
+            body.queuePosition = queuePosition;
+
+            // Save to DB
+            //const result = await BookingCollection.insertOne(body);
             const result = await BookingCollection.insertOne(body)
             res.json({
                 status: true,
@@ -799,11 +816,11 @@ async function run() {
         // predict melanoma percentage 
         app.post('/api/google/create-event', async (req, res) => {
             try {
-                const { doctorEmail, patientEmail, date, startTime,endTime, summary } = req.body;
-                    if (!doctorEmail || !patientEmail || !date || !startTime || !endTime) {
-      return res.status(400).json({ status: false, message: 'Missing required fields' });
-    }
-    console.log(startTime,endTime)
+                const { doctorEmail, patientEmail, date, startTime, endTime, summary } = req.body;
+                if (!doctorEmail || !patientEmail || !date || !startTime || !endTime) {
+                    return res.status(400).json({ status: false, message: 'Missing required fields' });
+                }
+                console.log(startTime, endTime)
                 const doctor = await usersCollection.findOne({ email: doctorEmail });
                 if (!doctor?.googleTokens) return res.status(400).send('Doctor not connected to Google');
 
@@ -814,17 +831,17 @@ async function run() {
                 oauth2Client.setCredentials(doctor.googleTokens);
 
                 const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
- const [startHours, startMinutes] = startTime.split(':').map(Number);
-    const [endHours, endMinutes] = endTime.split(':').map(Number);
-                    const startDate = new Date(date);
-    startDate.setHours(startHours, startMinutes, 0, 0);
+                const [startHours, startMinutes] = startTime.split(':').map(Number);
+                const [endHours, endMinutes] = endTime.split(':').map(Number);
+                const startDate = new Date(date);
+                startDate.setHours(startHours, startMinutes, 0, 0);
 
-    const endDate = new Date(date);
-    endDate.setHours(endHours, endMinutes, 0, 0);
+                const endDate = new Date(date);
+                endDate.setHours(endHours, endMinutes, 0, 0);
                 // Combine date and time into a Date object
-                
 
-                
+
+
 
                 const event = {
                     summary: summary || 'HealthQ Appointment',
@@ -853,7 +870,7 @@ async function run() {
                     doctorEmail,
                     patientEmail,
                     date: startDate,
-                    time:startTime,
+                    time: startTime,
                     summary: summary || 'HealthQ Appointment',
                     meetLink: response.data.hangoutLink,
                     eventId: response.data.id,
