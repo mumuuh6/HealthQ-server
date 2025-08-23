@@ -323,7 +323,7 @@ async function run() {
                 else if (user.userType === 'doctor') {
                     // Direct fields
                     if (body.name) updateFields.name = body.name;
-                    if (body.specialty) updateFields.specialty = body.specialty;
+                    if (body.Doctor_Type) updateFields.Doctor_Type = body.Doctor_Type;
                     if (body.phone) updateFields.phone = body.phone;
                     if (body.address) updateFields.address = body.address;
                     if (body.bio) updateFields.bio = body.bio;
