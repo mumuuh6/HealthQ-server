@@ -140,9 +140,12 @@ async function run() {
                     })
                 }
                 else {
-                    const { password, ...user } = req.body;
+                    const { password,userType, ...user } = req.body;
+                    
                     const existingUser = await usersCollection.findOne({ email: user?.email });
+                    
 
+                    
                     if (existingUser) {
                         return res.json({
                             status: false,
@@ -150,11 +153,29 @@ async function run() {
                             data: result
                         });
                     }
+                    if(userType==='doctor'){
+                        const existingpeople=await usersCollection.find({userType:userType}).toArray()
+                        
+                        const doctorid=existingpeople.length+1;
+                       
+                        const hashedPass = await bcrypt.hash(password, 10)
 
+                    const withRole = {
+                        ...user, password: hashedPass,userType,
+                    Doctor_ID:`D0000${doctorid}`, failedAttempts: 0, block: false
+                    }
+                    const insertResult = await usersCollection.insertOne(withRole);
+                    return res.json({
+                        status: true,
+                        message: 'User added successfully',
+                        data: insertResult
+                    });
+                    }
                     const hashedPass = await bcrypt.hash(password, 10)
 
                     const withRole = {
-                        ...user, password: hashedPass, role: "user", failedAttempts: 0, block: false
+                        ...user, password: hashedPass,userType,
+                     failedAttempts: 0, block: false
                     }
                     const insertResult = await usersCollection.insertOne(withRole);
                     return res.json({
@@ -258,7 +279,7 @@ async function run() {
             const email = req.params.email;
             // console.log("Updating profile for email:", email);
             const body = req.body;
-            //console.log("Request body:", body);
+            console.log("Request body:", body);
             let user = await usersCollection.findOne({ email })
             if (!user) {
                 res.json({ status: false, message: "User not found" })
@@ -306,7 +327,10 @@ async function run() {
                     if (body.phone) updateFields.phone = body.phone;
                     if (body.address) updateFields.address = body.address;
                     if (body.bio) updateFields.bio = body.bio;
+                    if (body.availableDays) updateFields.availableDays = body.availableDays;
                     if (body.email) updateFields.email = body.email;
+                    if (body.age) updateFields.Doctor_Age = body.age;
+                    if (body.timeSlotId) updateFields.timeSlotId = body.timeSlotId;
 
                     // // Education array
                     // if (Array.isArray(body.education)) {
@@ -775,8 +799,11 @@ async function run() {
         // predict melanoma percentage 
         app.post('/api/google/create-event', async (req, res) => {
             try {
-                const { doctorEmail, patientEmail, date, time, summary } = req.body;
-
+                const { doctorEmail, patientEmail, date, startTime,endTime, summary } = req.body;
+                    if (!doctorEmail || !patientEmail || !date || !startTime || !endTime) {
+      return res.status(400).json({ status: false, message: 'Missing required fields' });
+    }
+    console.log(startTime,endTime)
                 const doctor = await usersCollection.findOne({ email: doctorEmail });
                 if (!doctor?.googleTokens) return res.status(400).send('Doctor not connected to Google');
 
@@ -787,13 +814,17 @@ async function run() {
                 oauth2Client.setCredentials(doctor.googleTokens);
 
                 const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+ const [startHours, startMinutes] = startTime.split(':').map(Number);
+    const [endHours, endMinutes] = endTime.split(':').map(Number);
+                    const startDate = new Date(date);
+    startDate.setHours(startHours, startMinutes, 0, 0);
 
+    const endDate = new Date(date);
+    endDate.setHours(endHours, endMinutes, 0, 0);
                 // Combine date and time into a Date object
-                const [hours, minutes] = time.split(':').map(Number);
-                const startDate = new Date(date);
-                startDate.setHours(hours, minutes, 0, 0);
+                
 
-                const endDate = new Date(startDate.getTime() + 30 * 60 * 1000); // +30 min
+                
 
                 const event = {
                     summary: summary || 'HealthQ Appointment',
@@ -822,7 +853,7 @@ async function run() {
                     doctorEmail,
                     patientEmail,
                     date: startDate,
-                    time,
+                    time:startTime,
                     summary: summary || 'HealthQ Appointment',
                     meetLink: response.data.hangoutLink,
                     eventId: response.data.id,
