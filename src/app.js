@@ -717,44 +717,89 @@ async function run() {
         //get all doctors
 
 
-        app.get('/patient/active-queue/:email', async (req, res) => {
-            try {
-                const { email } = req.params;
+//         app.get('/patient/active-queue/:email', async (req, res) => {
+//             try {
+//                 const { email } = req.params;
 
-                if (!email) return res.status(400).json({ status: false, message: "Email is required" });
+//                 if (!email) return res.status(400).json({ status: false, message: "Email is required" });
 
-                // Get start and end of today
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const tomorrow = new Date(today);
-                tomorrow.setDate(tomorrow.getDate() + 1);
+//                 // Get start and end of today
+//                 const today = new Date();
+//                 today.setHours(0, 0, 0, 0);
+//                 const tomorrow = new Date(today);
+//                 tomorrow.setDate(tomorrow.getDate() + 1);
+//                 console.log("today:", today.toISOString());
+// console.log("tomorrow:", tomorrow.toISOString());
 
-                // Fetch appointments for today with queuePosition
-                const todaysAppointments = await BookingCollection.find({
-                    email,
-                    status: 'upcoming',
-                    queuePosition: { $exists: true, $ne: null },
-                    date: { $gte: today.toISOString(), $lt: tomorrow.toISOString() }
-                }).toArray();
+//                 // Fetch appointments for today with queuePosition
+//                 const todaysAppointments = await BookingCollection.find({
+//                     email,
+//                     status: 'upcoming',
+//                     queuePosition: { $exists: true, $ne: null },
+//                     date: { $gte: today.toISOString(), $lt: tomorrow.toISOString() }
+//                 }).toArray();
 
-                if (!todaysAppointments.length) {
-                    return res.json({ status: true, message: "No active queue today", data: null });
-                }
+//                 if (!todaysAppointments.length) {
+//                     return res.json({ status: true, message: "No active queue today", data: null });
+//                 }
 
-                // Sort by queuePosition
-                const activeQueue = todaysAppointments.sort((a, b) => a.queuePosition - b.queuePosition)[0];
+//                 // Sort by queuePosition
+//                 const activeQueue = todaysAppointments.sort((a, b) => a.queuePosition - b.queuePosition)[0];
 
-                return res.json({
-                    status: true,
-                    message: "Active queue fetched successfully",
-                    data: activeQueue
-                });
+//                 return res.json({
+//                     status: true,
+//                     message: "Active queue fetched successfully",
+//                     data: activeQueue
+//                 });
 
-            } catch (error) {
-                console.error(error);
-                return res.status(500).json({ status: false, message: "Server error", error });
-            }
+//             } catch (error) {
+//                 console.error(error);
+//                 return res.status(500).json({ status: false, message: "Server error", error });
+//             }
+//         });
+
+
+app.get('/patient/active-queue/:email', async (req, res) => {
+    try {
+        const { email } = req.params;
+
+        if (!email) 
+            return res.status(400).json({ status: false, message: "Email is required" });
+
+        // Get start and end of today in UTC
+        const now = new Date();
+        const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0));
+        const tomorrow = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0));
+
+        console.log("today:", today.toISOString());     // e.g., 2025-08-25T00:00:00.000Z
+        console.log("tomorrow:", tomorrow.toISOString()); // e.g., 2025-08-26T00:00:00.000Z
+
+        // Fetch appointments for today with queuePosition
+        const todaysAppointments = await BookingCollection.find({
+            email,
+            status: 'upcoming',
+            queuePosition: { $exists: true, $ne: null },
+            date: { $gte: today.toISOString(), $lt: tomorrow.toISOString() }
+        }).toArray();
+
+        if (!todaysAppointments.length) {
+            return res.json({ status: true, message: "No active queue today", data: null });
+        }
+
+        // Sort by queuePosition (lowest number = next in queue)
+        const activeQueue = todaysAppointments.sort((a, b) => a.queuePosition - b.queuePosition)[0];
+
+        return res.json({
+            status: true,
+            message: "Active queue fetched successfully",
+            data: activeQueue
         });
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ status: false, message: "Server error", error });
+    }
+});
 
         app.get("/current-patient/:doctorEmail", async (req, res) => {
     try {
