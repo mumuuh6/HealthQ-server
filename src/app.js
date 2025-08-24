@@ -674,15 +674,13 @@ async function run() {
             try {
                 const email = req.params.email;
                 const user = await usersCollection.findOne({ email: email });
-
                 if (!user) {
                     return res.status(404).json({ error: "User not found" });
                 }
-                const query = { doctorId: user?._id.toString() };
+                const query = { Doctor_ID: user?.Doctor_ID.toString() };
                 const doctorpatient = await BookingCollection.find(
                     query,
                 ).toArray();
-
                 if (!doctorpatient) {
                     return res.status(404).json({ error: "No patients found for this doctor" });
                 }
