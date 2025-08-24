@@ -633,9 +633,8 @@ async function run() {
         //book appointment API
         app.post('/book-appointment', async (req, res) => {
             const body = req.body
-            //console.log(body);
             const doctorEmail = body.docotorEmail;
-            const date = body.date;                // should be in ISO string
+            const date = body.date;
             const timeSlotId = body.timeSlotId;
 
             // Find how many existing bookings match this doctor, date, and slot
@@ -651,14 +650,166 @@ async function run() {
 
             // Save to DB
             //const result = await BookingCollection.insertOne(body);
-            const result = await BookingCollection.insertOne(body)
+            const insertResult = await BookingCollection.insertOne(body)
+            const bookingId = insertResult.insertedId;
+            //call queue tie prediction api
+            let estimatedWaitTime = null;
+            try {
+                const predictionRes = await axios.get(`https://queuepredictapi-production.up.railway.app/predict_queue_time/?booking_id=${bookingId}`);
+
+                estimatedWaitTime = predictionRes.data.Predicted_Queue_Time;
+            }
+            catch (error) {
+                console.error("Queue time prediction error:", error);
+            }
+            if (estimatedWaitTime) {
+                await BookingCollection.updateOne(
+                    { _id: bookingId },
+                    { $set: { estimatedWaitTime } }
+                );
+            }
             res.json({
                 status: true,
                 message: "Appointment Booked Successfully",
-                data: result
+                data: { ...insertResult, estimatedWaitTime }
             })
         })
+
+
+        //         app.get('/patient/active-queue/:email', async (req, res) => {
+        //   const { email } = req.params;
+
+        //   try {
+        //     const appointments = await BookingCollection.find({
+        //       email,
+        //       status: 'upcoming',
+        //       queuePosition: { $exists: true, $ne: null }
+        //     }).toArray();
+
+        //     if (!appointments.length) {
+        //       return res.json({ status: true, message: "No active queue", data: null });
+        //     }
+
+        //     // Sort by date first, then queuePosition
+        //     appointments.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        //     const activeAppointment = appointments[0];
+
+        //     const peopleAhead = activeAppointment.queuePosition ? activeAppointment.queuePosition - 1 : 0;
+
+        //     res.json({
+        //       status: true,
+        //       message: "Active queue fetched",
+        //       data: {
+        //         ...activeAppointment,
+        //         peopleAhead
+        //       }
+        //     });
+
+        //   } catch (err) {
+        //     console.error(err);
+        //     res.status(500).json({ status: false, message: "Server error" });
+        //   }
+        // });
+
+
+
         //get all doctors
+
+
+        app.get('/patient/active-queue/:email', async (req, res) => {
+            try {
+                const { email } = req.params;
+
+                if (!email) return res.status(400).json({ status: false, message: "Email is required" });
+
+                // Get start and end of today
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+
+                // Fetch appointments for today with queuePosition
+                const todaysAppointments = await BookingCollection.find({
+                    email,
+                    status: 'upcoming',
+                    queuePosition: { $exists: true, $ne: null },
+                    date: { $gte: today.toISOString(), $lt: tomorrow.toISOString() }
+                }).toArray();
+
+                if (!todaysAppointments.length) {
+                    return res.json({ status: true, message: "No active queue today", data: null });
+                }
+
+                // Sort by queuePosition
+                const activeQueue = todaysAppointments.sort((a, b) => a.queuePosition - b.queuePosition)[0];
+
+                return res.json({
+                    status: true,
+                    message: "Active queue fetched successfully",
+                    data: activeQueue
+                });
+
+            } catch (error) {
+                console.error(error);
+                return res.status(500).json({ status: false, message: "Server error", error });
+            }
+        });
+
+        app.get("/current-patient/:doctorEmail", async (req, res) => {
+    try {
+        const doctorEmail = req.params.doctorEmail;
+
+        // Use local date
+        const today = new Date();
+        const todayStr = today.getFullYear() + "-" + 
+                         String(today.getMonth() + 1).padStart(2, "0") + "-" + 
+                         String(today.getDate()).padStart(2, "0");
+
+        const patient = await BookingCollection.findOne({
+            docotorEmail: doctorEmail,
+            queuePosition: 1,
+            status: 'upcoming',
+            date: { $regex: `^${todayStr}` } // matches YYYY-MM-DD at start
+        });
+
+        if (!patient) return res.json({ status: true, data: null });
+
+        res.json({
+            status: true,
+            data: {
+                id: patient._id.toString(),
+                name: patient.patientName,
+                appointmentTime: patient.timeSlotId,
+                status: patient.status,
+                queuePosition: patient.queuePosition,
+                meetlink: patient.meetlink,
+                appointmentType: patient.Reason,
+            },
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ status: false, message: "Server error" });
+    }
+});
+ app.get('/findpatient/:id', async (req, res) => {
+    const id=req.params.id;
+    const query={_id:new ObjectId(id)}
+    const result=await BookingCollection.findOne(query);
+    res.json(result)
+ })
+ app.patch('/update-consultation/:patientId',async(req,res)=>{
+    const patientId=req.params.patientId;
+    const {consultationNotes,prescriptions,followUpDate}=req.body;
+    let updateFields={};
+    if(consultationNotes) updateFields.consultationNotes=consultationNotes;
+    if(prescriptions) updateFields.prescriptions=prescriptions;
+    if(followUpDate) updateFields.followUpDate=followUpDate;
+    console.log(updateFields)
+    const result2=await BookingCollection.updateOne({_id:new ObjectId(patientId)},{$set:updateFields});
+    res.json({status:true,message:"Consultation details updated",result2})
+})
+
         app.get('/doctor/:role', async (req, res) => {
             const role = req.params.role
             const query = { userType: role }
@@ -693,6 +844,33 @@ async function run() {
                 res.status(500).json({ error: "Internal Server Error" });
             }
         });
+        app.get('/schedule/:email', async (req, res) => {
+            try {
+                const email = req.params.email;
+                const bookings = await BookingCollection.find({ docotorEmail: email }).toArray();
+                if (!bookings) {
+                    return res.status(404).json({ error: "Booking not found for this Email" });
+                }
+                const formatted = bookings.map((b) => ({
+                    id: b._id,
+                    patient: b.patientName,
+                    time: b.timeSlotId,
+                    duration: b.duration || "30 mins",
+                    type: b.Reason,
+                    status: b.status || "confirmed",
+                    date: new Date(b.date).toISOString().split("T")[0],
+                }));
+                res.json({
+                    status: true,
+                    data: formatted
+                });
+            }
+            catch (error) {
+                console.error("Error fetching schedule:", error);
+                res.status(500).json({ error: "Internal Server Error" });
+            }
+
+        })
         //google auth API
         app.get('/auth/google', (req, res) => {
             const email = req.query.email;
