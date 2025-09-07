@@ -1,4 +1,4 @@
-const OpenAI =require('openai')
+const OpenAI = require('openai')
 require('dotenv').config();
 const dns = require('dns');
 const https = require('https');
@@ -35,19 +35,19 @@ app.use(cors({
     credentials: true
 }))
 app.use(cookieParser());
-const agent= new https.Agent({keepAlive:true,maxSockets:10});
+const agent = new https.Agent({ keepAlive: true, maxSockets: 10 });
 // const openai = new OpenAI({
 //     apiKey: process.env.OPENAI_API_KEY,
 //     timeout: 120000
 // });
-const openai=new OpenAI({
-    apiKey:process.env.OPENAI_API_KEY,
-    httpagent:agent,
-    model:"whisper-1",
-    timeout:300000
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    httpagent: agent,
+    model: "whisper-1",
+    timeout: 300000
 });
 
-console.log("OpenAIi API Key:", process.env.OPENAI_API_KEY ? "Loaded" : "Not Loaded");
+//console.log("OpenAIi API Key:", process.env.OPENAI_API_KEY ? "Loaded" : "Not Loaded");
 
 async function convertWebMToMP3(inputPath, outputPath) {
     return new Promise((resolve, reject) => {
@@ -60,35 +60,35 @@ async function convertWebMToMP3(inputPath, outputPath) {
 }
 
 async function transcribeAudio(filePath) {
-  try {
-    const formData = new FormData();
-    formData.append("file", fs.createReadStream(filePath));
-    formData.append("model", "whisper-1");
+    try {
+        const formData = new FormData();
+        formData.append("file", fs.createReadStream(filePath));
+        formData.append("model", "whisper-1");
 
-    const response = await axios.post(
-      "https://api.openai.com/v1/audio/transcriptions",
-      formData,
-      {
-        headers: {
-          ...formData.getHeaders(),
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
-        maxBodyLength: Infinity, // avoid request size issues
-      }
-    );
+        const response = await axios.post(
+            "https://api.openai.com/v1/audio/transcriptions",
+            formData,
+            {
+                headers: {
+                    ...formData.getHeaders(),
+                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                },
+                maxBodyLength: Infinity, // avoid request size issues
+            }
+        );
 
-    console.log("Transcription:", response.data.text);
-    return response.data.text;
-    // const response =await openai.audio.transcriptions.create({
-    //     file:fs.createReadStream('./uploads/1757166733210-converted.mp3'),
-    //     model:"whisper-1",
-    // })
-    // console.log("Transcription:", response.text);
-  } catch (err) {
-    //console.error("Axios transcription error:", err.response?.data || err.message);
-    console.error("Transcription error:", err);
-    throw err;
-  }
+        console.log("Transcription:", response.data.text);
+        return response.data.text;
+        // const response =await openai.audio.transcriptions.create({
+        //     file:fs.createReadStream('./uploads/1757166733210-converted.mp3'),
+        //     model:"whisper-1",
+        // })
+        // console.log("Transcription:", response.text);
+    } catch (err) {
+        //console.error("Axios transcription error:", err.response?.data || err.message);
+        console.error("Transcription error:", err);
+        throw err;
+    }
 }
 
 // MongoDB connection
@@ -135,8 +135,8 @@ async function run() {
         const usersCollection = database.collection("users")
         const BookingCollection = database.collection("bookings")
         const medinicineCollection = database.collection("medicines")
-        const cartCollection=database.collection('carts');
-        const paymentCollection=database.collection('payments');
+        const cartCollection = database.collection('carts');
+        const paymentCollection = database.collection('payments');
 
         // verify token middleware
         const verifyToken = (req, res, next) => {
@@ -910,29 +910,123 @@ async function run() {
 
         })
         // Upload audio and save to 'uploads/' folder
+        // app.post("/upload-audio/:id", upload.single("audio"), async (req, res) => {
+        //     try {
+        //         const appointmentId = req.params.id;
+        //         //console.log(appointmentId, 'id')
+        //         const file = req.file;
+        //         //console.log(file, '1');
+        //         if (!file) {
+        //             return res.status(400).json({ error: "No file uploaded" });
+        //         }
+        //         const mp3path = path.join('uploads', `${Date.now()}-converted.mp3`);
+        //         await convertWebMToMP3(file.path, mp3path);
+        //         console.log('File converted to MP3:', mp3path);
+        //         // const transcript = await transcribeWithWhisper(file.path);
+        //         const transcript = await transcribeAudio(mp3path);
+        //         if (!transcript) {
+        //             return res.status(500).json({ error: "Transcription failed" });
+        //         }
+        //         const prompt = `
+        // Extract the following medical details from the transcript below.
+        // Output in JSON format with these keys:
+        // bp, pulse, temperature, allergies, chief_complaint, history_of_patient_illness, followup_instruction, next_appointment
+
+        // Transcript:
+        // ${transcript}
+        // `;
+
+        // const response = await openai.chat.completions.create({
+        //     model: "gpt-4o-mini",
+        //     messages: [
+        //         { role: "system", content: "You are a helpful medical assistant." },
+        //         { role: "user", content: prompt },
+        //     ],
+        //     temperature: 0,
+        // });
+
+        // // Parse GPT output JSON
+        // const gptOutput = response.choices[0].message?.content || "{}";
+        // let structuredData;
+        // try {
+        //     structuredData = JSON.parse(gptOutput);
+        // } catch (err) {
+        //     structuredData = { error: "Failed to parse GPT output" };
+        // }
+        // console.log('Extracted structured data:', structuredData);
+        //         res.json({ message: "File uploaded successfully", path: file.path, transcript,structuredData });
+        //     } catch (err) {
+        //         console.error(err);
+        //         res.status(500).json({ error: "Server error" });
+        //     }
+        // });
         app.post("/upload-audio/:id", upload.single("audio"), async (req, res) => {
             try {
                 const appointmentId = req.params.id;
-                console.log(appointmentId, 'id')
                 const file = req.file;
-                console.log(file, '1');
+
                 if (!file) {
                     return res.status(400).json({ error: "No file uploaded" });
                 }
+
                 const mp3path = path.join('uploads', `${Date.now()}-converted.mp3`);
                 await convertWebMToMP3(file.path, mp3path);
                 console.log('File converted to MP3:', mp3path);
-                // const transcript = await transcribeWithWhisper(file.path);
+
                 const transcript = await transcribeAudio(mp3path);
                 if (!transcript) {
                     return res.status(500).json({ error: "Transcription failed" });
                 }
-                res.json({ message: "File uploaded successfully", path: file.path, transcript });
+
+                // GPT prompt to extract structured medical data
+                const prompt = `
+Extract the following medical details from the transcript below.
+Output strictly in JSON format with these keys:
+bp, pulse, temperature, allergies, chief_complaint, history_of_patient_illness, followup_instruction, next_appointment.
+
+If any field is not mentioned, set its value to "Not mentioned".
+
+Transcript:
+${transcript}
+`;
+
+                const response = await openai.chat.completions.create({
+                    model: "gpt-4o-mini",
+                    messages: [
+                        { role: "system", content: "You are a helpful medical assistant." },
+                        { role: "user", content: prompt },
+                    ],
+                    temperature: 0,
+                });
+
+                // Get raw GPT output
+                const gptOutput = response.choices[0].message?.content || "{}";
+
+                // Robust JSON extraction using regex (handles GPT extra text or formatting)
+                let structuredData = {};
+                try {
+                    // Match the first JSON object in the GPT output
+                    const match = gptOutput.match(/\{[\s\S]*\}/);
+                    structuredData = match ? JSON.parse(match[0]) : {};
+                } catch (err) {
+                    structuredData = { error: "Failed to parse GPT output" };
+                }
+
+                console.log('Extracted structured data:', structuredData);
+
+                res.json({
+                    message: "File uploaded and processed successfully",
+                    path: file.path,
+                    transcript,
+                    structuredData
+                });
+
             } catch (err) {
                 console.error(err);
                 res.status(500).json({ error: "Server error" });
             }
         });
+
 
 
         //google auth API
@@ -1135,63 +1229,63 @@ async function run() {
         app.post('/cart', async (req, res) => {
             const payload = req.body;
             const result = await cartCollection.insertOne(payload);
-            
+
             const transactionId = getTransactionId()
-            
-                const data = {
-                    store_id: process.env.SSL_STORE_ID,
-                    store_passwd: process.env.SSL_STORE_PASS,
-                    total_amount: payload.amount,
-                    currency: "BDT",
-                    tran_id: transactionId,
-                    success_url: `${process.env.SSL_SUCCESS_BACKEND_URL}?transactionId=${transactionId}&amount=${payload.amount}&status=success`,
-                    fail_url: `${process.env.SSL_FAIL_BACKEND_URL}?transactionId=${transactionId}&amount=${payload.amount}&status=fail`,
-                    cancel_url: `${process.env.SSL_CANCEL_BACKEND_URL}?transactionId=${transactionId}&amount=${payload.amount}&status=cancel`,
-                    shipping_method: "N/A",
-                    product_name: "Medicine",
-                    product_category: "Service",
-                    product_profile: "general",
-                    cus_name: payload.name,
-                    cus_email: payload.email,
-                    cus_add2: "N/A",
-                    cus_city: "Dhaka",
-                    cus_state: "Dhaka",
-                    cus_postcode: "1000",
-                    cus_country: "Bangladesh",
-                    cus_fax: "01711111111",
-                    ship_name: "N/A",
-                    ship_add1: "N/A",
-                    ship_add2: "N/A",
-                    ship_city: "N/A",
-                    ship_state: "N/A",
-                    ship_postcode: 1000,
-                    ship_country: "N/A",
-                }
 
-                const response = await axios({
-                    method: "POST",
-                    url: process.env.SSL_PAYMENT_API,
-                    data: data,
-                    headers: { "Content-Type": "application/x-www-form-urlencoded" }
-                })
+            const data = {
+                store_id: process.env.SSL_STORE_ID,
+                store_passwd: process.env.SSL_STORE_PASS,
+                total_amount: payload.amount,
+                currency: "BDT",
+                tran_id: transactionId,
+                success_url: `${process.env.SSL_SUCCESS_BACKEND_URL}?transactionId=${transactionId}&amount=${payload.amount}&status=success`,
+                fail_url: `${process.env.SSL_FAIL_BACKEND_URL}?transactionId=${transactionId}&amount=${payload.amount}&status=fail`,
+                cancel_url: `${process.env.SSL_CANCEL_BACKEND_URL}?transactionId=${transactionId}&amount=${payload.amount}&status=cancel`,
+                shipping_method: "N/A",
+                product_name: "Medicine",
+                product_category: "Service",
+                product_profile: "general",
+                cus_name: payload.name,
+                cus_email: payload.email,
+                cus_add2: "N/A",
+                cus_city: "Dhaka",
+                cus_state: "Dhaka",
+                cus_postcode: "1000",
+                cus_country: "Bangladesh",
+                cus_fax: "01711111111",
+                ship_name: "N/A",
+                ship_add1: "N/A",
+                ship_add2: "N/A",
+                ship_city: "N/A",
+                ship_state: "N/A",
+                ship_postcode: 1000,
+                ship_country: "N/A",
+            }
+
+            const response = await axios({
+                method: "POST",
+                url: process.env.SSL_PAYMENT_API,
+                data: data,
+                headers: { "Content-Type": "application/x-www-form-urlencoded" }
+            })
 
 
-                await paymentCollection.insertOne({
-                    medicineCartId: result.insertedId,
-                    status: "UNPAID",
-                    transactionId: transactionId,
-                    amount: payload.amount,
-                    email: payload.email,
-                    name: payload.name
-                })
+            await paymentCollection.insertOne({
+                medicineCartId: result.insertedId,
+                status: "UNPAID",
+                transactionId: transactionId,
+                amount: payload.amount,
+                email: payload.email,
+                name: payload.name
+            })
 
-                return res.json({
-                    success: true,
-                    message: "Get Gateway PageURL",
-                    paymentLink: response.data.GatewayPageURL,
-                    payload
-                })
-            
+            return res.json({
+                success: true,
+                message: "Get Gateway PageURL",
+                paymentLink: response.data.GatewayPageURL,
+                payload
+            })
+
         });
 
         // SSL Commerz Payment Related APIs
