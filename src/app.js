@@ -1,4 +1,7 @@
+const OpenAI =require('openai')
 require('dotenv').config();
+const dns = require('dns');
+const https = require('https');
 //const dotenv = require('dotenv');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const express = require('express');
@@ -9,15 +12,19 @@ const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const bcrypt = require("bcrypt");
 const { google } = require('googleapis');
-
-const nodemailer = require('nodemailer')
+const { spawn } = require("child_process");
+const nodemailer = require('nodemailer');
 const multer = require("multer");
 const axios = require("axios");
 const fs = require("fs");
 const FormData = require("form-data");
 const e = require('express');
-
+const path = require('path')
 const app = express()
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegPath = require('ffmpeg-static');
+ffmpeg.setFfmpegPath(ffmpegPath);
+dns.setDefaultResultOrder('ipv4first');
 app.use(express.json())
 app.use(morgan('dev'))
 app.use(cors({
@@ -27,12 +34,68 @@ app.use(cors({
     ],
     credentials: true
 }))
-
-app.use(cors())
 app.use(cookieParser());
-//console.log(process.env.GOOGLE_Client_ID);
+const agent= new https.Agent({keepAlive:true,maxSockets:10});
+// const openai = new OpenAI({
+//     apiKey: process.env.OPENAI_API_KEY,
+//     timeout: 120000
+// });
+const openai=new OpenAI({
+    apiKey:process.env.OPENAI_API_KEY,
+    httpagent:agent,
+    model:"whisper-1",
+    timeout:300000
+});
+
+console.log("OpenAIi API Key:", process.env.OPENAI_API_KEY ? "Loaded" : "Not Loaded");
+
+async function convertWebMToMP3(inputPath, outputPath) {
+    return new Promise((resolve, reject) => {
+        ffmpeg(inputPath)
+            .output(outputPath)
+            .on('end', () => resolve(outputPath))
+            .on('error', (err) => reject(err))
+            .run();
+    });
+}
+
+async function transcribeAudio(filePath) {
+  try {
+    const formData = new FormData();
+    formData.append("file", fs.createReadStream(filePath));
+    formData.append("model", "whisper-1");
+
+    const response = await axios.post(
+      "https://api.openai.com/v1/audio/transcriptions",
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders(),
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        maxBodyLength: Infinity, // avoid request size issues
+      }
+    );
+
+    console.log("Transcription:", response.data.text);
+    return response.data.text;
+    // const response =await openai.audio.transcriptions.create({
+    //     file:fs.createReadStream('./uploads/1757166733210-converted.mp3'),
+    //     model:"whisper-1",
+    // })
+    // console.log("Transcription:", response.text);
+  } catch (err) {
+    //console.error("Axios transcription error:", err.response?.data || err.message);
+    console.error("Transcription error:", err);
+    throw err;
+  }
+}
+
 // MongoDB connection
 const uri = `mongodb+srv://${process.env.USER_NAME}:${process.env.PASSWORD}@cluster0.4ayta.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+
+
+
 
 // Gemini API client
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
@@ -44,6 +107,11 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     }
 });
+
+const { apikeys } = require('googleapis/build/src/apis/apikeys');
+const { model } = require('mongoose');
+const { time } = require('console');
+
 
 // 📂 Multer Setup (File Upload)
 const storage = multer.diskStorage({
@@ -67,6 +135,8 @@ async function run() {
         const usersCollection = database.collection("users")
         const BookingCollection = database.collection("bookings")
         const medinicineCollection = database.collection("medicines")
+        const cartCollection=database.collection('carts');
+        const paymentCollection=database.collection('payments');
 
         // verify token middleware
         const verifyToken = (req, res, next) => {
@@ -675,189 +745,106 @@ async function run() {
             })
         })
 
+        app.get('/patient/active-queue/:email', async (req, res) => {
+            try {
+                const { email } = req.params;
 
-        //         app.get('/patient/active-queue/:email', async (req, res) => {
-        //   const { email } = req.params;
+                if (!email)
+                    return res.status(400).json({ status: false, message: "Email is required" });
 
-        //   try {
-        //     const appointments = await BookingCollection.find({
-        //       email,
-        //       status: 'upcoming',
-        //       queuePosition: { $exists: true, $ne: null }
-        //     }).toArray();
+                // Get start and end of today in UTC
+                const now = new Date();
+                const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0));
+                const tomorrow = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0));
 
-        //     if (!appointments.length) {
-        //       return res.json({ status: true, message: "No active queue", data: null });
-        //     }
+                // Convert to DB-style ISO string with +00:00
+                const todayStr = today.toISOString().replace('Z', '+00:00');
+                const tomorrowStr = tomorrow.toISOString().replace('Z', '+00:00');
 
-        //     // Sort by date first, then queuePosition
-        //     appointments.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                console.log("today:", todayStr);      // e.g., 2025-08-25T00:00:00.000+00:00
+                console.log("tomorrow:", tomorrowStr); // e.g., 2025-08-26T00:00:00.000+00:00
 
-        //     const activeAppointment = appointments[0];
+                // Fetch appointments for today with queuePosition
+                const todaysAppointments = await BookingCollection.find({
+                    email,
+                    status: 'upcoming',
+                    queuePosition: { $exists: true, $ne: null },
+                    date: { $gte: todayStr, $lt: tomorrowStr }
+                }).toArray();
 
-        //     const peopleAhead = activeAppointment.queuePosition ? activeAppointment.queuePosition - 1 : 0;
+                if (!todaysAppointments.length) {
+                    return res.json({ status: true, message: "No active queue today", data: null });
+                }
 
-        //     res.json({
-        //       status: true,
-        //       message: "Active queue fetched",
-        //       data: {
-        //         ...activeAppointment,
-        //         peopleAhead
-        //       }
-        //     });
+                // Sort by queuePosition (lowest number = next in queue)
+                const activeQueue = todaysAppointments.sort((a, b) => a.queuePosition - b.queuePosition)[0];
 
-        //   } catch (err) {
-        //     console.error(err);
-        //     res.status(500).json({ status: false, message: "Server error" });
-        //   }
-        // });
+                return res.json({
+                    status: true,
+                    message: "Active queue fetched successfully",
+                    data: activeQueue
+                });
 
-
-
-        //get all doctors
-
-
-//         app.get('/patient/active-queue/:email', async (req, res) => {
-//             try {
-//                 const { email } = req.params;
-
-//                 if (!email) return res.status(400).json({ status: false, message: "Email is required" });
-
-//                 // Get start and end of today
-//                 const today = new Date();
-//                 today.setHours(0, 0, 0, 0);
-//                 const tomorrow = new Date(today);
-//                 tomorrow.setDate(tomorrow.getDate() + 1);
-//                 console.log("today:", today.toISOString());
-// console.log("tomorrow:", tomorrow.toISOString());
-
-//                 // Fetch appointments for today with queuePosition
-//                 const todaysAppointments = await BookingCollection.find({
-//                     email,
-//                     status: 'upcoming',
-//                     queuePosition: { $exists: true, $ne: null },
-//                     date: { $gte: today.toISOString(), $lt: tomorrow.toISOString() }
-//                 }).toArray();
-
-//                 if (!todaysAppointments.length) {
-//                     return res.json({ status: true, message: "No active queue today", data: null });
-//                 }
-
-//                 // Sort by queuePosition
-//                 const activeQueue = todaysAppointments.sort((a, b) => a.queuePosition - b.queuePosition)[0];
-
-//                 return res.json({
-//                     status: true,
-//                     message: "Active queue fetched successfully",
-//                     data: activeQueue
-//                 });
-
-//             } catch (error) {
-//                 console.error(error);
-//                 return res.status(500).json({ status: false, message: "Server error", error });
-//             }
-//         });
-
-app.get('/patient/active-queue/:email', async (req, res) => {
-    try {
-        const { email } = req.params;
-
-        if (!email) 
-            return res.status(400).json({ status: false, message: "Email is required" });
-
-        // Get start and end of today in UTC
-        const now = new Date();
-        const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0));
-        const tomorrow = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0));
-
-        // Convert to DB-style ISO string with +00:00
-        const todayStr = today.toISOString().replace('Z', '+00:00');
-        const tomorrowStr = tomorrow.toISOString().replace('Z', '+00:00');
-
-        console.log("today:", todayStr);      // e.g., 2025-08-25T00:00:00.000+00:00
-        console.log("tomorrow:", tomorrowStr); // e.g., 2025-08-26T00:00:00.000+00:00
-
-        // Fetch appointments for today with queuePosition
-        const todaysAppointments = await BookingCollection.find({
-            email,
-            status: 'upcoming',
-            queuePosition: { $exists: true, $ne: null },
-            date: { $gte: todayStr, $lt: tomorrowStr }
-        }).toArray();
-
-        if (!todaysAppointments.length) {
-            return res.json({ status: true, message: "No active queue today", data: null });
-        }
-
-        // Sort by queuePosition (lowest number = next in queue)
-        const activeQueue = todaysAppointments.sort((a, b) => a.queuePosition - b.queuePosition)[0];
-
-        return res.json({
-            status: true,
-            message: "Active queue fetched successfully",
-            data: activeQueue
+            } catch (error) {
+                console.error(error);
+                return res.status(500).json({ status: false, message: "Server error", error });
+            }
         });
-
-    } catch (error) {
-        console.error(error);
-        return res.status(500).json({ status: false, message: "Server error", error });
-    }
-});
 
 
         app.get("/current-patient/:doctorEmail", async (req, res) => {
-    try {
-        const doctorEmail = req.params.doctorEmail;
+            try {
+                const doctorEmail = req.params.doctorEmail;
 
-        // Use local date
-        const today = new Date();
-        const todayStr = today.getFullYear() + "-" + 
-                         String(today.getMonth() + 1).padStart(2, "0") + "-" + 
-                         String(today.getDate()).padStart(2, "0");
+                // Use local date
+                const today = new Date();
+                const todayStr = today.getFullYear() + "-" +
+                    String(today.getMonth() + 1).padStart(2, "0") + "-" +
+                    String(today.getDate()).padStart(2, "0");
 
-        const patient = await BookingCollection.findOne({
-            docotorEmail: doctorEmail,
-            queuePosition: 1,
-            status: 'upcoming',
-            date: { $regex: `^${todayStr}` } // matches YYYY-MM-DD at start
+                const patient = await BookingCollection.findOne({
+                    docotorEmail: doctorEmail,
+                    queuePosition: 1,
+                    status: 'upcoming',
+                    date: { $regex: `^${todayStr}` } // matches YYYY-MM-DD at start
+                });
+
+                if (!patient) return res.json({ status: true, data: null });
+
+                res.json({
+                    status: true,
+                    data: {
+                        id: patient._id.toString(),
+                        name: patient.patientName,
+                        appointmentTime: patient.timeSlotId,
+                        status: patient.status,
+                        queuePosition: patient.queuePosition,
+                        meetlink: patient.meetlink,
+                        appointmentType: patient.Reason,
+                    },
+                });
+            } catch (error) {
+                console.error(error);
+                res.status(500).json({ status: false, message: "Server error" });
+            }
         });
-
-        if (!patient) return res.json({ status: true, data: null });
-
-        res.json({
-            status: true,
-            data: {
-                id: patient._id.toString(),
-                name: patient.patientName,
-                appointmentTime: patient.timeSlotId,
-                status: patient.status,
-                queuePosition: patient.queuePosition,
-                meetlink: patient.meetlink,
-                appointmentType: patient.Reason,
-            },
-        });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ status: false, message: "Server error" });
-    }
-});
- app.get('/findpatient/:id', async (req, res) => {
-    const id=req.params.id;
-    const query={_id:new ObjectId(id)}
-    const result=await BookingCollection.findOne(query);
-    res.json(result)
- })
- app.patch('/update-consultation/:patientId',async(req,res)=>{
-    const patientId=req.params.patientId;
-    const {consultationNotes,prescriptions,followUpDate}=req.body;
-    let updateFields={};
-    if(consultationNotes) updateFields.consultationNotes=consultationNotes;
-    if(prescriptions) updateFields.prescriptions=prescriptions;
-    if(followUpDate) updateFields.followUpDate=followUpDate;
-    console.log(updateFields)
-    const result2=await BookingCollection.updateOne({_id:new ObjectId(patientId)},{$set:updateFields});
-    res.json({status:true,message:"Consultation details updated",result2})
-})
+        app.get('/findpatient/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await BookingCollection.findOne(query);
+            res.json(result)
+        })
+        app.patch('/update-consultation/:patientId', async (req, res) => {
+            const patientId = req.params.patientId;
+            const { consultationNotes, prescriptions, followUpDate } = req.body;
+            let updateFields = {};
+            if (consultationNotes) updateFields.consultationNotes = consultationNotes;
+            if (prescriptions) updateFields.prescriptions = prescriptions;
+            if (followUpDate) updateFields.followUpDate = followUpDate;
+            console.log(updateFields)
+            const result2 = await BookingCollection.updateOne({ _id: new ObjectId(patientId) }, { $set: updateFields });
+            res.json({ status: true, message: "Consultation details updated", result2 })
+        })
 
         app.get('/doctor/:role', async (req, res) => {
             const role = req.params.role
@@ -897,10 +884,12 @@ app.get('/patient/active-queue/:email', async (req, res) => {
             try {
                 const email = req.params.email;
                 const bookings = await BookingCollection.find({ docotorEmail: email }).toArray();
+
                 if (!bookings) {
                     return res.status(404).json({ error: "Booking not found for this Email" });
                 }
                 const formatted = bookings.map((b) => ({
+                    ...b,
                     id: b._id,
                     patient: b.patientName,
                     time: b.timeSlotId,
@@ -920,6 +909,32 @@ app.get('/patient/active-queue/:email', async (req, res) => {
             }
 
         })
+        // Upload audio and save to 'uploads/' folder
+        app.post("/upload-audio/:id", upload.single("audio"), async (req, res) => {
+            try {
+                const appointmentId = req.params.id;
+                console.log(appointmentId, 'id')
+                const file = req.file;
+                console.log(file, '1');
+                if (!file) {
+                    return res.status(400).json({ error: "No file uploaded" });
+                }
+                const mp3path = path.join('uploads', `${Date.now()}-converted.mp3`);
+                await convertWebMToMP3(file.path, mp3path);
+                console.log('File converted to MP3:', mp3path);
+                // const transcript = await transcribeWithWhisper(file.path);
+                const transcript = await transcribeAudio(mp3path);
+                if (!transcript) {
+                    return res.status(500).json({ error: "Transcription failed" });
+                }
+                res.json({ message: "File uploaded successfully", path: file.path, transcript });
+            } catch (err) {
+                console.error(err);
+                res.status(500).json({ error: "Server error" });
+            }
+        });
+
+
         //google auth API
         app.get('/auth/google', (req, res) => {
             const email = req.query.email;
@@ -954,12 +969,12 @@ app.get('/patient/active-queue/:email', async (req, res) => {
             const code = req.query.code;
             const state = JSON.parse(req.query.state || '{}');
             const email = state.email;
-            const redirectPath = state.redirect
+            const redirectPath = state.redirect;
             //console.log('State email:', email,state); 
             if (!code || !email) {
                 return res.status(400).send('Invalid request');
             }
-            console.log('Received code:', code);
+            //console.log('Received code:', code);
             const oauth2Client = new google.auth.OAuth2(
                 process.env.GOOGLE_Client_ID,
                 process.env.GOOGLE_Client_Secret,
@@ -999,53 +1014,33 @@ app.get('/patient/active-queue/:email', async (req, res) => {
                 res.redirect(`https://healthq.vercel.app/${redirectPath}?calendar=error`);
             }
         });
-        // app.post('/api/google/create-event', async (req, res) => {
-        //     const { doctorEmail, patientEmail, date, time, summary } = req.body;
 
-        //     // const doctorsCollection = client.db('HealthQ').collection('users');
-        //     const doctor = await usersCollection.findOne({ email: doctorEmail });
+        app.post('/transcribe-meet/:appointmentId', upload.single('audio'), async (req, res) => {
+            try {
+                const appointmentId = req.params.appointmentId;
+                const file = req.file;
+                console.log(file, '2')
+                if (!file) {
+                    return res.status(400).json({ status: false, message: "No audio uploaded" });
+                }
+                // const transcript=await transcribeWithWhisper(file.path);
+                // await BookingCollection.updateOne({_id:new ObjectId(appointmentId)},{$set:{transcript}});
+                // res.json({status:true,transcript})
 
-        //     if (!doctor?.googleTokens) return res.status(400).send('Doctor not connected to Google');
 
-        //     const oauth2Client = new google.auth.OAuth2(
-        //         process.env.GOOGLE_Client_ID,
-        //         process.env.GOOGLE_Client_Secret
-        //     );
-        //     oauth2Client.setCredentials(doctor.googleTokens);
+            } catch (err) {
+                console.error(err);
+                res.status(500).json({ status: false, message: "Transcribe failed", error: err.message });
+            }
+        });
 
-        //     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-
-        //     const event = {
-        //         summary: summary || 'HealthQ Appointment',
-        //         description: `Appointment with ${patientEmail}`,
-        //         start: { dateTime: new Date(`${date}T${time}`), timeZone: 'Asia/Dhaka' },
-        //         end: { dateTime: new Date(`${date}T${time}` + 30 * 60 * 1000), timeZone: 'Asia/Dhaka' },
-        //         attendees: [{ email: patientEmail }],
-        //         conferenceData: { createRequest: { requestId: `meet-${Date.now()}` } }
-        //     };
-
-        //     try {
-        //         const response = await calendar.events.insert({
-        //             calendarId: 'primary',
-        //             resource: event,
-        //             conferenceDataVersion: 1
-        //         });
-
-        //         res.json({ status: true, meetLink: response.data.hangoutLink, eventId: response.data.id });
-        //     } catch (error) {
-        //         console.error(error);
-        //         res.status(500).json({ status: false, message: 'Failed to create event', error: error.message });
-        //     }
-        // });
-
-        // predict melanoma percentage 
         app.post('/api/google/create-event', async (req, res) => {
             try {
                 const { doctorEmail, patientEmail, date, startTime, endTime, summary } = req.body;
                 if (!doctorEmail || !patientEmail || !date || !startTime || !endTime) {
                     return res.status(400).json({ status: false, message: 'Missing required fields' });
                 }
-                console.log(startTime, endTime)
+                //console.log(startTime, endTime)
                 const doctor = await usersCollection.findOne({ email: doctorEmail });
                 if (!doctor?.googleTokens) return res.status(400).send('Doctor not connected to Google');
 
@@ -1134,6 +1129,263 @@ app.get('/patient/active-queue/:email', async (req, res) => {
                 res.status(500).json({ message: "Server error during image upload" });
             }
         });
+        const getTransactionId = () => {
+            return `tran_${Date.now()}`;
+        }
+        app.post('/cart', async (req, res) => {
+            const payload = req.body;
+            const result = await cartCollection.insertOne(payload);
+            
+            const transactionId = getTransactionId()
+            
+                const data = {
+                    store_id: process.env.SSL_STORE_ID,
+                    store_passwd: process.env.SSL_STORE_PASS,
+                    total_amount: payload.amount,
+                    currency: "BDT",
+                    tran_id: transactionId,
+                    success_url: `${process.env.SSL_SUCCESS_BACKEND_URL}?transactionId=${transactionId}&amount=${payload.amount}&status=success`,
+                    fail_url: `${process.env.SSL_FAIL_BACKEND_URL}?transactionId=${transactionId}&amount=${payload.amount}&status=fail`,
+                    cancel_url: `${process.env.SSL_CANCEL_BACKEND_URL}?transactionId=${transactionId}&amount=${payload.amount}&status=cancel`,
+                    shipping_method: "N/A",
+                    product_name: "Medicine",
+                    product_category: "Service",
+                    product_profile: "general",
+                    cus_name: payload.name,
+                    cus_email: payload.email,
+                    cus_add2: "N/A",
+                    cus_city: "Dhaka",
+                    cus_state: "Dhaka",
+                    cus_postcode: "1000",
+                    cus_country: "Bangladesh",
+                    cus_fax: "01711111111",
+                    ship_name: "N/A",
+                    ship_add1: "N/A",
+                    ship_add2: "N/A",
+                    ship_city: "N/A",
+                    ship_state: "N/A",
+                    ship_postcode: 1000,
+                    ship_country: "N/A",
+                }
+
+                const response = await axios({
+                    method: "POST",
+                    url: process.env.SSL_PAYMENT_API,
+                    data: data,
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" }
+                })
+
+
+                await paymentCollection.insertOne({
+                    medicineCartId: result.insertedId,
+                    status: "UNPAID",
+                    transactionId: transactionId,
+                    amount: payload.amount,
+                    email: payload.email,
+                    name: payload.name
+                })
+
+                return res.json({
+                    success: true,
+                    message: "Get Gateway PageURL",
+                    paymentLink: response.data.GatewayPageURL,
+                    payload
+                })
+            
+        });
+
+        // SSL Commerz Payment Related APIs
+        // app.post("/payment/init", async (req, res) => {
+
+        //     const payload = req.body
+
+        //     const transactionId = getTransactionId()
+        //     try {
+        //         const data = {
+        //             store_id: process.env.SSL_STORE_ID,
+        //             store_passwd: process.env.SSL_STORE_PASS,
+        //             total_amount: payload.amount,
+        //             currency: "BDT",
+        //             tran_id: transactionId,
+        //             success_url: `${process.env.SSL_SUCCESS_BACKEND_URL}?transactionId=${transactionId}&amount=${payload.amount}&status=success`,
+        //             fail_url: `${process.env.SSL_FAIL_BACKEND_URL}?transactionId=${transactionId}&amount=${payload.amount}&status=fail`,
+        //             cancel_url: `${process.env.SSL_CANCEL_BACKEND_URL}?transactionId=${transactionId}&amount=${payload.amount}&status=cancel`,
+        //             shipping_method: "N/A",
+        //             product_name: "Medicine",
+        //             product_category: "Service",
+        //             product_profile: "general",
+        //             cus_name: payload.name,
+        //             cus_email: payload.email,
+        //             cus_add2: "N/A",
+        //             cus_city: "Dhaka",
+        //             cus_state: "Dhaka",
+        //             cus_postcode: "1000",
+        //             cus_country: "Bangladesh",
+        //             cus_fax: "01711111111",
+        //             ship_name: "N/A",
+        //             ship_add1: "N/A",
+        //             ship_add2: "N/A",
+        //             ship_city: "N/A",
+        //             ship_state: "N/A",
+        //             ship_postcode: 1000,
+        //             ship_country: "N/A",
+        //         }
+
+        //         const response = await axios({
+        //             method: "POST",
+        //             url: process.env.SSL_PAYMENT_API,
+        //             data: data,
+        //             headers: { "Content-Type": "application/x-www-form-urlencoded" }
+        //         })
+
+
+        //         await paymentCollection.insertOne({
+        //             medicineCartId: payload.cartId,
+        //             status: "UNPAID",
+        //             transactionId: transactionId,
+        //             amount: payload.amount,
+        //             email: payload.email,
+        //             name: payload.name
+        //         })
+
+        //         return res.json({
+        //             success: true,
+        //             message: "Get Gateway PageURL",
+        //             paymentLink: response.data.GatewayPageURL,
+        //             payload
+        //         })
+        //     }
+        //     catch (error) {
+        //         console.log("Payment Error Occurred", error);
+        //         throw new Error(error.message)
+        //     }
+        // })
+
+        app.post("/payment/success", async (req, res) => {
+            const query = req.query;
+
+            const updatedPayment = await paymentCollection.updateOne(
+                { transactionId: query.transactionId },
+                { $set: { status: "PAID" } }
+            );
+
+            if (!updatedPayment) {
+                throw new Error("Payment Not Found");
+            }
+
+            const redirectUrl = `${process.env.SSL_SUCCESS_FRONTEND_URL}?transactionId=${query.transactionId}&message=Payment Complete Successfully&amount=${query.amount}&status=${query.status}`;
+            console.log("Redirecting to:", redirectUrl);
+
+            return res.redirect(redirectUrl);
+
+        });
+
+        app.post("/payment/fail", async (req, res) => {
+            const query = req.query
+
+            let updatedPayment = await paymentCollection.updateOne(
+                {
+                    transactionId: query.transactionId
+                },
+                { $set: { status: "FAILED" } }
+            )
+
+            if (!updatedPayment) {
+                throw new Error("Payment Not Found")
+            }
+
+            const redirectUrl = `${process.env.SSL_FAIL_FRONTEND_URL}?transactionId=${query.transactionId}&message=${"Payment Failed"}&amount=${query.amount}&status=${query.status}`
+
+            return res.redirect(redirectUrl)
+
+        })
+
+        app.post("/payment/cancel", async (req, res) => {
+            const query = req.query
+
+            let updatedPayment = await paymentCollection.updateOne(
+                {
+                    transactionId: query.transactionId
+                },
+                { $set: { status: "CANCELED" } }
+            )
+
+            if (!updatedPayment) {
+                throw new Error("Payment Not Found")
+            }
+
+            const redirectUrl = `${process.env.SSL_CANCEL_FRONTEND_URL}?transactionId=${query.transactionId}&message=${"Payment Canceled"}&amount=${query.amount}&status=${query.status}`
+
+            return res.redirect(redirectUrl)
+
+        })
+
+        app.post("/payment/again/:paymentId", async (req, res) => {
+            const paymentId = req.params.paymentId
+
+            // console.log("PaymentID", paymentId);
+
+            const payment = await paymentCollection.findOne({ _id: new ObjectId(paymentId) })
+
+            if (!payment) {
+                throw new Error("Payment Not Found. You don't give payment request")
+            }
+
+            if (payment.status === "PAID") {
+                return {
+                    success: true,
+                    message: "Payment already Paid"
+                }
+            }
+
+            // console.log("Payment", payment);
+
+            const data = {
+                store_id: process.env.SSL_STORE_ID,
+                store_passwd: process.env.SSL_STORE_PASS,
+                total_amount: payment.amount,
+                currency: "BDT",
+                tran_id: payment.transactionId,
+                success_url: `${process.env.SSL_SUCCESS_BACKEND_URL}?transactionId=${payment.transactionId}&amount=${payment.amount}&status=success`,
+                fail_url: `${process.env.SSL_FAIL_BACKEND_URL}?transactionId=${payment.transactionId}&amount=${payment.amount}&status=fail`,
+                cancel_url: `${process.env.SSL_CANCEL_BACKEND_URL}?transactionId=${payment.transactionId}&amount=${payment.amount}&status=cancel`,
+                shipping_method: "N/A",
+                product_name: "Medicine",
+                product_category: "Service",
+                product_profile: "general",
+                cus_name: payment.name,
+                cus_email: payment.email,
+                cus_add2: "N/A",
+                cus_city: "Dhaka",
+                cus_state: "Dhaka",
+                cus_postcode: "1000",
+                cus_country: "Bangladesh",
+                cus_fax: "01711111111",
+                ship_name: "N/A",
+                ship_add1: "N/A",
+                ship_add2: "N/A",
+                ship_city: "N/A",
+                ship_state: "N/A",
+                ship_postcode: 1000,
+                ship_country: "N/A",
+            }
+
+            const response = await axios({
+                method: "POST",
+                url: process.env.SSL_PAYMENT_API,
+                data: data,
+                headers: { "Content-Type": "application/x-www-form-urlencoded" }
+            })
+
+            // console.log("Response", response.data);
+
+            return res.json({
+                success: true,
+                message: "Get Gateway PageURL",
+                paymentLink: response.data.GatewayPageURL
+            })
+
+        })
 
     } catch (error) {
         console.error("❌ MongoDB Connection Error:", error);
