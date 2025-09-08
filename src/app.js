@@ -969,7 +969,7 @@ async function run() {
                     return res.status(400).json({ error: "No file uploaded" });
                 }
 
-                const mp3path = path.join('uploads', `${Date.now()}-converted.mp3`);
+                const mp3path = path.join('tmp', `${Date.now()}-converted.mp3`);
                 await convertWebMToMP3(file.path, mp3path);
                 console.log('File converted to MP3:', mp3path);
 
