@@ -802,25 +802,42 @@ async function run() {
                     String(today.getMonth() + 1).padStart(2, "0") + "-" +
                     String(today.getDate()).padStart(2, "0");
 
-                const patient = await BookingCollection.findOne({
+                const patient = await BookingCollection
+                .find({
                     docotorEmail: doctorEmail,
-                    queuePosition: 1,
                     status: 'upcoming',
-                    date: { $regex: `^${todayStr}` } // matches YYYY-MM-DD at start
-                });
+                    date: { $regex: `^${todayStr}` },
 
-                if (!patient) return res.json({ status: true, data: null });
+                })
+                .sort({ queuePosition: 1 })
+                .toArray();
+
+                if (!patient.length) return res.json({ status: true, data: { currentPatient: null, queue: [] } });
 
                 res.json({
                     status: true,
-                    data: {
-                        id: patient._id.toString(),
-                        name: patient.patientName,
-                        appointmentTime: patient.timeSlotId,
-                        status: patient.status,
-                        queuePosition: patient.queuePosition,
-                        meetlink: patient.meetlink,
-                        appointmentType: patient.Reason,
+                    data:
+                    {
+                        currentPatient:
+                        {
+                            id: patient[0]._id.toString(),
+                            name: patient[0].patientName,
+                            appointmentTime: patient[0].timeSlotId,
+                            status: patient[0].status,
+                            queuePosition: patient[0].queuePosition,
+                            meetlink: patient[0].meetlink,
+                            appointmentType: patient[0].Reason,
+                        },
+                        queue: patient.slice(1).map((p) => ({
+                            id: p._id.toString(),
+                            name: p.patientName,
+                            appointmentTime: p.timeSlotId,
+                            status: p.status,
+                            queuePosition: p.queuePosition,
+                            meetlink: p.meetlink,
+                            appointmentType: p.Reason,
+                            waitTime:p.estimatedWaitTime
+                        }))
                     },
                 });
             } catch (error) {
@@ -828,6 +845,23 @@ async function run() {
                 res.status(500).json({ status: false, message: "Server error" });
             }
         });
+app.post("/queue/complete/:patientId", async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    // ✅ Mark current patient as completed
+    await BookingCollection.updateOne(
+      { _id: new ObjectId(patientId) },
+      { $set: { status: "completed" } }
+    );
+
+    res.json({ status: true, message: "Patient marked as completed" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ status: false, message: "Server error" });
+  }
+});
+
         app.get('/findpatient/:id', async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
