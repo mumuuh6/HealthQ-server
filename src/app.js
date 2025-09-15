@@ -23,6 +23,7 @@ const path = require('path')
 const app = express()
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('ffmpeg-static');
+const os = require("os");
 ffmpeg.setFfmpegPath(ffmpegPath);
 dns.setDefaultResultOrder('ipv4first');
 app.use(express.json())
@@ -112,11 +113,12 @@ const { apikeys } = require('googleapis/build/src/apis/apikeys');
 const { model } = require('mongoose');
 const { time } = require('console');
 
-
+const tmpDir = os.tmpdir();
+console.log(tmpDir, 'tmpDir')
 // 📂 Multer Setup (File Upload)
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, "/tmp");
+        cb(null, tmpDir);
     },
     filename: function (req, file, cb) {
         cb(null, Date.now() + "-" + file.originalname);
@@ -803,14 +805,14 @@ async function run() {
                     String(today.getDate()).padStart(2, "0");
 
                 const patient = await BookingCollection
-                .find({
-                    docotorEmail: doctorEmail,
-                    status: 'upcoming',
-                    date: { $regex: `^${todayStr}` },
+                    .find({
+                        docotorEmail: doctorEmail,
+                        status: 'upcoming',
+                        date: { $regex: `^${todayStr}` },
 
-                })
-                .sort({ queuePosition: 1 })
-                .toArray();
+                    })
+                    .sort({ queuePosition: 1 })
+                    .toArray();
 
                 if (!patient.length) return res.json({ status: true, data: { currentPatient: null, queue: [] } });
 
@@ -836,7 +838,7 @@ async function run() {
                             queuePosition: p.queuePosition,
                             meetlink: p.meetlink,
                             appointmentType: p.Reason,
-                            waitTime:p.estimatedWaitTime
+                            waitTime: p.estimatedWaitTime
                         }))
                     },
                 });
@@ -845,22 +847,22 @@ async function run() {
                 res.status(500).json({ status: false, message: "Server error" });
             }
         });
-app.post("/queue/complete/:patientId", async (req, res) => {
-  try {
-    const { patientId } = req.params;
+        app.post("/queue/complete/:patientId", async (req, res) => {
+            try {
+                const { patientId } = req.params;
 
-    // ✅ Mark current patient as completed
-    await BookingCollection.updateOne(
-      { _id: new ObjectId(patientId) },
-      { $set: { status: "completed" } }
-    );
+                // ✅ Mark current patient as completed
+                await BookingCollection.updateOne(
+                    { _id: new ObjectId(patientId) },
+                    { $set: { status: "completed" } }
+                );
 
-    res.json({ status: true, message: "Patient marked as completed" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ status: false, message: "Server error" });
-  }
-});
+                res.json({ status: true, message: "Patient marked as completed" });
+            } catch (err) {
+                console.error(err);
+                res.status(500).json({ status: false, message: "Server error" });
+            }
+        });
 
         app.get('/findpatient/:id', async (req, res) => {
             const id = req.params.id;
@@ -994,6 +996,73 @@ app.post("/queue/complete/:patientId", async (req, res) => {
         //         res.status(500).json({ error: "Server error" });
         //     }
         // });
+        //         app.post("/upload-audio/:id", upload.single("audio"), async (req, res) => {
+        //             try {
+        //                 const appointmentId = req.params.id;
+        //                 const file = req.file;
+
+        //                 if (!file) {
+        //                     return res.status(400).json({ error: "No file uploaded" });
+        //                 }
+
+        //                 const mp3path = path.join(path.dirname(file.path), `${Date.now()}-converted.mp3`);
+
+        //                 await convertWebMToMP3(file.path, mp3path);
+        //                 console.log('File converted to MP3:', mp3path);
+
+        //                 const transcript = await transcribeAudio(mp3path);
+        //                 if (!transcript) {
+        //                     return res.status(500).json({ error: "Transcription failed" });
+        //                 }
+
+        //                 // GPT prompt to extract structured medical data
+        //                 const prompt = `
+        // Extract the following medical details from the transcript below.
+        // Output strictly in JSON format with these keys:
+        // bp, pulse, temperature, allergies, chief_complaint, history_of_patient_illness, followup_instruction, next_appointment.
+
+        // If any field is not mentioned, set its value to "Not mentioned".
+
+        // Transcript:
+        // ${transcript}
+        // `;
+
+        //                 const response = await openai.chat.completions.create({
+        //                     model: "gpt-4o-mini",
+        //                     messages: [
+        //                         { role: "system", content: "You are a helpful medical assistant." },
+        //                         { role: "user", content: prompt },
+        //                     ],
+        //                     temperature: 0,
+        //                 });
+
+        //                 // Get raw GPT output
+        //                 const gptOutput = response.choices[0].message?.content || "{}";
+
+        //                 // Robust JSON extraction using regex (handles GPT extra text or formatting)
+        //                 let structuredData = {};
+        //                 try {
+        //                     // Match the first JSON object in the GPT output
+        //                     const match = gptOutput.match(/\{[\s\S]*\}/);
+        //                     structuredData = match ? JSON.parse(match[0]) : {};
+        //                 } catch (err) {
+        //                     structuredData = { error: "Failed to parse GPT output" };
+        //                 }
+
+        //                 console.log('Extracted structured data:', structuredData);
+
+        //                 res.json({
+        //                     message: "File uploaded and processed successfully",
+        //                     path: file.path,
+        //                     transcript,
+        //                     structuredData
+        //                 });
+
+        //             } catch (err) {
+        //                 console.error(err);
+        //                 res.status(500).json({ error: "Server error" });
+        //             }
+        //         });
         app.post("/upload-audio/:id", upload.single("audio"), async (req, res) => {
             try {
                 const appointmentId = req.params.id;
@@ -1003,7 +1072,7 @@ app.post("/queue/complete/:patientId", async (req, res) => {
                     return res.status(400).json({ error: "No file uploaded" });
                 }
 
-                const mp3path = path.join('/tmp', `${Date.now()}-converted.mp3`);
+                const mp3path = path.join(tmpDir, `${Date.now()}-converted.mp3`);
                 await convertWebMToMP3(file.path, mp3path);
                 console.log('File converted to MP3:', mp3path);
 
@@ -1162,81 +1231,123 @@ ${transcript}
             }
         });
 
+        // app.post('/api/google/create-event', async (req, res) => {
+        //     try {
+        //         const { doctorEmail, patientEmail, date, startTime, endTime, summary } = req.body;
+        //         if (!doctorEmail || !patientEmail || !date || !startTime || !endTime) {
+        //             return res.status(400).json({ status: false, message: 'Missing required fields' });
+        //         }
+        //         //console.log(startTime, endTime)
+        //         const doctor = await usersCollection.findOne({ email: doctorEmail });
+        //         if (!doctor?.googleTokens) return res.status(400).send('Doctor not connected to Google');
+
+        //         const oauth2Client = new google.auth.OAuth2(
+        //             process.env.GOOGLE_Client_ID,
+        //             process.env.GOOGLE_Client_Secret
+        //         );
+        //         oauth2Client.setCredentials(doctor.googleTokens);
+
+        //         const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+        //         const [startHours, startMinutes] = startTime.split(':').map(Number);
+        //         const [endHours, endMinutes] = endTime.split(':').map(Number);
+        //         const startDate = new Date(date);
+        //         startDate.setHours(startHours, startMinutes, 0, 0);
+
+        //         const endDate = new Date(date);
+        //         endDate.setHours(endHours, endMinutes, 0, 0);
+        //         // Combine date and time into a Date object
+
+
+
+
+        //         const event = {
+        //             summary: summary || 'HealthQ Appointment',
+        //             description: `Appointment with ${patientEmail}`,
+        //             start: { dateTime: startDate.toISOString(), timeZone: 'Asia/Dhaka' },
+        //             end: { dateTime: endDate.toISOString(), timeZone: 'Asia/Dhaka' },
+        //             attendees: [{ email: patientEmail }],
+        //             conferenceData: { createRequest: { requestId: `meet-${Date.now()}` } },
+        //             reminders: {
+        //                 useDefault: false,
+        //                 overrides: [
+        //                     { method: 'email', minutes: 30 }, // email 30 min before
+        //                     { method: 'popup', minutes: 10 } // 10 minutes before
+        //                 ]
+        //             }
+        //         };
+
+
+        //         const response = await calendar.events.insert({
+        //             calendarId: 'primary',
+        //             resource: event,
+        //             conferenceDataVersion: 1,
+        //             sendUpdates: 'all'
+        //         });
+        //         const appointment = {
+        //             doctorEmail,
+        //             patientEmail,
+        //             date: startDate,
+        //             time: startTime,
+        //             summary: summary || 'HealthQ Appointment',
+        //             meetLink: response.data.hangoutLink,
+        //             eventId: response.data.id,
+
+        //             status: 'upcoming'
+        //         };
+        //         await BookingCollection.updateOne(
+        //             { doctorEmail, patientEmail, date: startDate },
+        //             { $set: appointment },
+        //             { upsert: true }
+        //         );
+        //         res.json({ status: true, meetLink: response.data.hangoutLink, eventId: response.data.id });
+        //     }
+        //     catch (error) {
+        //         console.error("Error creating event:", error);
+        //         res.status(500).json({ status: false, message: 'Failed to create event', error: error.message });
+        //     }
+
+        // });
         app.post('/api/google/create-event', async (req, res) => {
             try {
                 const { doctorEmail, patientEmail, date, startTime, endTime, summary } = req.body;
+
                 if (!doctorEmail || !patientEmail || !date || !startTime || !endTime) {
                     return res.status(400).json({ status: false, message: 'Missing required fields' });
                 }
-                //console.log(startTime, endTime)
-                const doctor = await usersCollection.findOne({ email: doctorEmail });
-                if (!doctor?.googleTokens) return res.status(400).send('Doctor not connected to Google');
 
-                const oauth2Client = new google.auth.OAuth2(
-                    process.env.GOOGLE_Client_ID,
-                    process.env.GOOGLE_Client_Secret
-                );
-                oauth2Client.setCredentials(doctor.googleTokens);
+                // Generate Jitsi room name (unique but readable)
+                const roomName = `HealthQ-${doctorEmail.split('@')[0]}-${Date.now()}`;
+                const meetLink = `https://meet.jit.si/${roomName}`;
 
-                const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-                const [startHours, startMinutes] = startTime.split(':').map(Number);
-                const [endHours, endMinutes] = endTime.split(':').map(Number);
+                // Create appointment object
                 const startDate = new Date(date);
+                const [startHours, startMinutes] = startTime.split(':').map(Number);
                 startDate.setHours(startHours, startMinutes, 0, 0);
 
-                const endDate = new Date(date);
-                endDate.setHours(endHours, endMinutes, 0, 0);
-                // Combine date and time into a Date object
-
-
-
-
-                const event = {
-                    summary: summary || 'HealthQ Appointment',
-                    description: `Appointment with ${patientEmail}`,
-                    start: { dateTime: startDate.toISOString(), timeZone: 'Asia/Dhaka' },
-                    end: { dateTime: endDate.toISOString(), timeZone: 'Asia/Dhaka' },
-                    attendees: [{ email: patientEmail }],
-                    conferenceData: { createRequest: { requestId: `meet-${Date.now()}` } },
-                    reminders: {
-                        useDefault: false,
-                        overrides: [
-                            { method: 'email', minutes: 30 }, // email 30 min before
-                            { method: 'popup', minutes: 10 } // 10 minutes before
-                        ]
-                    }
-                };
-
-
-                const response = await calendar.events.insert({
-                    calendarId: 'primary',
-                    resource: event,
-                    conferenceDataVersion: 1,
-                    sendUpdates: 'all'
-                });
                 const appointment = {
                     doctorEmail,
                     patientEmail,
                     date: startDate,
                     time: startTime,
                     summary: summary || 'HealthQ Appointment',
-                    meetLink: response.data.hangoutLink,
-                    eventId: response.data.id,
-
-                    status: 'upcoming'
+                    meetLink,
+                    eventId: roomName, // Instead of Google Event ID, use room name
+                    status: 'upcoming',
                 };
+
+                // Save to DB
                 await BookingCollection.updateOne(
                     { doctorEmail, patientEmail, date: startDate },
                     { $set: appointment },
                     { upsert: true }
                 );
-                res.json({ status: true, meetLink: response.data.hangoutLink, eventId: response.data.id });
-            }
-            catch (error) {
-                console.error("Error creating event:", error);
+
+                res.json({ status: true, meetLink, eventId: roomName });
+
+            } catch (error) {
+                console.error("Error creating Jitsi event:", error);
                 res.status(500).json({ status: false, message: 'Failed to create event', error: error.message });
             }
-
         });
 
 
